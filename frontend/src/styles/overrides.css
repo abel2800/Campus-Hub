@@ -1,0 +1,60 @@
+/* overrides.css */
+.ant-menu-item {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.ant-card {
+  border-radius: 8px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+}
+
+.ant-card-body {
+  padding: 16px;
+}
+
+.ant-btn {
+  border-radius: 4px;
+}
+
+/* Smaller course cards */
+.ant-col-md-8 {
+  max-width: 25%;
+}
+
+/* Course card styling */
+.course-card .ant-card-meta-title {
+  font-size: 16px;
+  margin-bottom: 8px;
+}
+
+.course-card .ant-card-meta-description {
+  font-size: 13px;
+}
+
+.course-card .ant-space {
+  font-size: 12px;
+}
+
+.course-card .ant-tag {
+  font-size: 11px;
+  padding: 0 6px;
+}
+
+/* Adjust button sizes */
+.course-card .ant-card-actions .ant-btn {
+  font-size: 12px;
+  padding: 0 8px;
+  height: 28px;
+}
+
+/* Adjust spacing */
+.ant-row {
+  margin-right: -8px !important;
+  margin-left: -8px !important;
+}
+
+.ant-col {
+  padding-right: 8px !important;
+  padding-left: 8px !important;
+}
