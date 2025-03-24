@@ -4,7 +4,7 @@ import {
   Statistic, Tag, Avatar, List, Progress, 
   Button, Divider, Space, Spin, Empty, message, 
   Table, Rate, Modal, Input, Dropdown, Menu,
-  Upload, Popconfirm, Alert
+  Upload, Popconfirm, Alert, Slider
 } from 'antd';
 import { 
   PlayCircleOutlined, 
@@ -22,7 +22,8 @@ import {
   PlusOutlined,
   EyeOutlined,
   MoreOutlined,
-  TeamOutlined
+  TeamOutlined,
+  ReloadOutlined
 } from '@ant-design/icons';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from '../../utils/axios';
@@ -49,6 +50,9 @@ const CourseView = ({ courseId: propsCourseId }) => {
   const [studentProgressModalVisible, setStudentProgressModalVisible] = useState(false);
   const [studentVideoProgress, setStudentVideoProgress] = useState([]);
   const [studentProgressLoading, setStudentProgressLoading] = useState(false);
+  const [videoPreviewVisible, setVideoPreviewVisible] = useState(false);
+  const [currentVideoUrl, setCurrentVideoUrl] = useState('');
+  const [currentVideoTitle, setCurrentVideoTitle] = useState('');
   
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -83,6 +87,21 @@ const CourseView = ({ courseId: propsCourseId }) => {
     };
   }, [courseId]);
 
+  useEffect(() => {
+    // Process videos to ensure they have proper values
+    if (videos && videos.length > 0) {
+      const processedVideos = videos.map(video => ({
+        ...video,
+        title: video.title || 'Untitled Video',
+        description: video.description || 'No description provided',
+        duration: video.duration || '00:00',
+        // Add a property to check if video has a valid URL
+        hasValidUrl: !!(video.videoUrl || video.url)
+      }));
+      setVideos(processedVideos);
+    }
+  }, [videos.length]);
+
   const fetchCourseData = async () => {
     setLoading(true);
     try {
@@ -113,8 +132,11 @@ const CourseView = ({ courseId: propsCourseId }) => {
       // Fetch course videos with proper error handling
       try {
         const videosResponse = await axios.get(`/api/courses/${courseId}/videos`);
-        const videosData = videosResponse.data;
+        let videosData = videosResponse.data;
         console.log('Course videos received:', videosData.length, 'videos');
+        
+        // Process video data to ensure URLs are properly formatted
+        videosData = processVideoData(videosData);
         setVideos(videosData);
       } catch (videoError) {
         console.error('Error fetching course videos, trying alternative endpoint:', videoError);
@@ -122,8 +144,11 @@ const CourseView = ({ courseId: propsCourseId }) => {
         // Try teacher-specific endpoint as fallback
         try {
           const teacherVideosResponse = await axios.get(`/api/teacher/courses/${courseId}/videos`);
-          const teacherVideosData = teacherVideosResponse.data;
+          let teacherVideosData = teacherVideosResponse.data;
           console.log('Teacher videos received:', teacherVideosData.length, 'videos');
+          
+          // Process video data to ensure URLs are properly formatted
+          teacherVideosData = processVideoData(teacherVideosData);
           setVideos(teacherVideosData);
         } catch (teacherVideoError) {
           console.error('Error fetching videos from teacher API:', teacherVideoError);
@@ -147,6 +172,48 @@ const CourseView = ({ courseId: propsCourseId }) => {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Function to validate and process video data
+  const processVideoData = (videoList) => {
+    if (!videoList || !Array.isArray(videoList)) return [];
+    
+    return videoList.map(video => {
+      if (!video) return null;
+      
+      // Create a copy to avoid mutating the original object
+      const processedVideo = { ...video };
+      
+      // Set default values for missing fields
+      if (!processedVideo.title) processedVideo.title = 'Untitled Video';
+      if (!processedVideo.description) processedVideo.description = 'No description available';
+      if (!processedVideo.duration) processedVideo.duration = 'Unknown duration';
+      
+      // Try to find a valid URL from multiple possible properties
+      const possibleUrlProps = ['videoUrl', 'url', 'src', 'videoPath', 'filePath', 'link'];
+      let foundUrl = null;
+      
+      // Find the first non-empty URL property
+      for (const prop of possibleUrlProps) {
+        if (processedVideo[prop] && typeof processedVideo[prop] === 'string' && processedVideo[prop].trim() !== '') {
+          foundUrl = processedVideo[prop].trim();
+          break;
+        }
+      }
+      
+      // Set a unified videoUrl property
+      processedVideo.videoUrl = foundUrl;
+      
+      // Mark if the video has a valid URL
+      processedVideo.hasValidUrl = Boolean(foundUrl);
+      
+      // Add timestamp property if missing
+      if (!processedVideo.createdAt) {
+        processedVideo.createdAt = new Date().toISOString();
+      }
+      
+      return processedVideo;
+    }).filter(Boolean); // Remove null values
   };
 
   const fetchEnrolledStudents = async (showLoading = true) => {
@@ -178,7 +245,7 @@ const CourseView = ({ courseId: propsCourseId }) => {
       
       // Process enrollment data based on the structure returned from the API
       // This handles both standard and teacher API response formats
-      const formattedStudents = enrollmentsData.map(enrollment => {
+      const formattedStudents = await Promise.all(enrollmentsData.map(async enrollment => {
         // Extract the student data, handling differences in API response structure
         const student = enrollment.student || enrollment.User || enrollment;
         const userId = student?.id || enrollment.userId;
@@ -186,6 +253,62 @@ const CourseView = ({ courseId: propsCourseId }) => {
         const firstName = student?.firstName || student?.first_name || '';
         const lastName = student?.lastName || student?.last_name || '';
         const fullName = `${firstName} ${lastName}`.trim() || username;
+        
+        // Try to fetch accurate progress data for this student
+        let studentProgress = enrollment.progress || 0;
+        let videoProgressData = [];
+        
+        // Try to get detailed progress info if not already provided
+        if (!enrollment.progress || enrollment.progress === 0) {
+          try {
+            // Try multiple endpoints
+            let progressData;
+            try {
+              const progressResponse = await axios.get(`/api/courses/${courseId}/students/${userId}/progress`);
+              progressData = progressResponse.data;
+            } catch (e1) {
+              try {
+                const teacherProgressResponse = await axios.get(`/api/teacher/courses/${courseId}/students/${userId}/progress`);
+                progressData = teacherProgressResponse.data;
+              } catch (e2) {
+                try {
+                  const altProgressResponse = await axios.get(`/api/student-progress/${courseId}/${userId}`);
+                  progressData = altProgressResponse.data;
+                } catch (e3) {
+                  console.log(`Couldn't fetch detailed progress for student ${userId}`);
+                  progressData = [];
+                }
+              }
+            }
+            
+            // Calculate actual progress if we got progress data
+            if (progressData && progressData.length > 0) {
+              // Map video progress data
+              videoProgressData = videos.map(video => {
+                const progressRecord = progressData.find(p => 
+                  p.videoId === video.id || 
+                  p.video_id === video.id || 
+                  p.videoID === video.id
+                );
+                
+                return {
+                  videoId: video.id,
+                  progress: progressRecord?.progress || progressRecord?.completion || 0,
+                  completed: (progressRecord?.progress >= 100) || progressRecord?.completed || false
+                };
+              });
+              
+              // Calculate overall progress from video progress
+              if (videos.length > 0) {
+                studentProgress = calculateOverallProgress(videoProgressData, videos.length);
+                console.log(`Calculated progress for student ${userId}: ${studentProgress}%`);
+              }
+            }
+          } catch (progressError) {
+            console.error('Error fetching detailed progress for student:', progressError);
+            // Keep the default progress value
+          }
+        }
         
         return {
           id: userId,
@@ -197,11 +320,12 @@ const CourseView = ({ courseId: propsCourseId }) => {
           email: student?.email,
           enrollmentDate: enrollment.enrollmentDate || enrollment.createdAt,
           lastActivity: enrollment.lastActivityDate || enrollment.updatedAt,
-          progress: enrollment.progress || 0,
-          status: enrollment.status || 'enrolled',
-          grade: enrollment.grade || calculateGrade(enrollment.progress)
+          progress: studentProgress,
+          status: enrollment.status || (studentProgress >= 100 ? 'completed' : 'enrolled'),
+          grade: enrollment.grade || calculateGrade(studentProgress),
+          videoProgress: videoProgressData
         };
-      });
+      }));
       
       // Set state with the formatted data
       setEnrolledStudents(formattedStudents);
@@ -243,7 +367,32 @@ const CourseView = ({ courseId: propsCourseId }) => {
 
   const handleEditCourse = () => {
     console.log('Navigating to edit course page for course ID:', courseId);
-    window.location.href = `/teacher/courses/${courseId}/edit`;
+    try {
+      window.location.href = `/teacher/courses/${courseId}/edit`;
+    } catch (error) {
+      console.error('Error navigating to edit course:', error);
+      message.error('Failed to navigate to edit course page');
+    }
+  };
+
+  const handleManageVideos = () => {
+    console.log('Navigating to manage videos page for course ID:', courseId);
+    try {
+      window.location.href = `/teacher/courses/${courseId}/videos`;
+    } catch (error) {
+      console.error('Error navigating to manage videos:', error);
+      message.error('Failed to navigate to manage videos page');
+    }
+  };
+
+  const handleAddVideo = () => {
+    console.log('Navigating to add video page for course ID:', courseId);
+    try {
+      window.location.href = `/teacher/courses/${courseId}/videos/add`;
+    } catch (error) {
+      console.error('Error navigating to add video:', error);
+      message.error('Failed to navigate to add video page');
+    }
   };
 
   const handleGradeStudent = (student) => {
@@ -292,6 +441,20 @@ const CourseView = ({ courseId: propsCourseId }) => {
     });
   };
 
+  // Function to calculate overall progress based on video progress
+  const calculateOverallProgress = (videoProgressArray, totalVideos) => {
+    if (!videoProgressArray || videoProgressArray.length === 0 || !totalVideos || totalVideos === 0) {
+      return 0;
+    }
+    
+    // Sum up all video progress percentages
+    const totalProgress = videoProgressArray.reduce((sum, video) => sum + (video.progress || 0), 0);
+    
+    // Calculate the average progress
+    return Math.round(totalProgress / totalVideos);
+  };
+
+  // Improved handling of student progress data
   const handleViewStudentProgress = async (student) => {
     try {
       setSelectedStudent(student);
@@ -303,43 +466,534 @@ const CourseView = ({ courseId: propsCourseId }) => {
       // Fetch student's progress for individual videos
       let progressData = [];
       try {
-        const response = await axios.get(`/api/courses/${courseId}/students/${student.id}/progress`);
-        progressData = response.data;
-        console.log('Student progress data received:', progressData);
-      } catch (mainError) {
-        console.error('Error fetching from main API:', mainError);
-        
-        // Try teacher-specific endpoint as fallback
+        // Try multiple API endpoints with proper error handling
         try {
-          const teacherResponse = await axios.get(`/api/teacher/courses/${courseId}/students/${student.id}/progress`);
-          progressData = teacherResponse.data;
-          console.log('Student progress from teacher API:', progressData);
-        } catch (teacherError) {
-          console.error('Error fetching from teacher API:', teacherError);
-          message.warning('Could not fetch detailed progress data for this student');
-          // Still continue with empty progress data
+          const response = await axios.get(`/api/courses/${courseId}/students/${student.id}/progress`);
+          progressData = response.data;
+          console.log('Student progress data received from main API:', progressData);
+        } catch (mainError) {
+          console.error('Error fetching from main API:', mainError);
+          
+          // Try teacher-specific endpoint as fallback
+          try {
+            const teacherResponse = await axios.get(`/api/teacher/courses/${courseId}/students/${student.id}/progress`);
+            progressData = teacherResponse.data;
+            console.log('Student progress from teacher API:', progressData);
+          } catch (teacherError) {
+            console.error('Error fetching from teacher API:', teacherError);
+            
+            // Try alternative endpoint structures
+            try {
+              const alternativeResponse = await axios.get(`/api/student-progress/${courseId}/${student.id}`);
+              progressData = alternativeResponse.data;
+              console.log('Student progress from alternative API:', progressData);
+            } catch (altError) {
+              console.error('Error fetching from alternative API:', altError);
+              message.warning('Could not fetch detailed progress data for this student');
+              // Continue with empty progress data
+            }
+          }
         }
+        
+        // Map video progress data with course videos
+        const videoProgressData = videos.map(video => {
+          // Find progress for this video by video ID
+          const progressRecord = progressData.find(p => 
+            p.videoId === video.id || 
+            p.video_id === video.id || 
+            p.videoID === video.id
+          );
+          
+          // If progress record exists, use it; otherwise, default to 0
+          const videoProgress = progressRecord ? {
+            progress: progressRecord.progress || progressRecord.completion || 0,
+            lastWatched: progressRecord.lastWatched || progressRecord.updatedAt || progressRecord.lastViewed || null,
+            watchTime: progressRecord.watchTime || progressRecord.watchDuration || progressRecord.duration || 0,
+            completed: (progressRecord.progress >= 100) || progressRecord.completed || false
+          } : {
+            progress: 0,
+            lastWatched: null,
+            watchTime: 0,
+            completed: false
+          };
+          
+          return {
+            ...video,
+            ...videoProgress
+          };
+        });
+        
+        // Calculate updated overall progress
+        const overallProgress = calculateOverallProgress(videoProgressData, videos.length);
+        
+        // Update the student's overall progress in the local state if it differs
+        if (overallProgress !== student.progress) {
+          console.log('Updating student progress from', student.progress, 'to', overallProgress);
+          
+          // Update the student in the students array
+          const updatedStudents = students.map(s => 
+            s.id === student.id ? { ...s, progress: overallProgress } : s
+          );
+          setStudents(updatedStudents);
+          
+          // Also update in enrolledStudents array for consistency
+          const updatedEnrolledStudents = enrolledStudents.map(s => 
+            s.id === student.id ? { ...s, progress: overallProgress } : s
+          );
+          setEnrolledStudents(updatedEnrolledStudents);
+          
+          // Update selected student with new progress
+          setSelectedStudent({
+            ...student,
+            progress: overallProgress
+          });
+        }
+        
+        setStudentVideoProgress(videoProgressData);
+        
+      } catch (error) {
+        console.error('Error processing student progress data:', error);
+        message.warning('There was an issue processing the student progress data');
       }
-      
-      // Map video progress data with course videos
-      const videoProgressData = videos.map(video => {
-        const progressRecord = progressData.find(p => p.videoId === video.id);
-        return {
-          ...video,
-          progress: progressRecord?.progress || 0,
-          lastWatched: progressRecord?.lastWatched || null,
-          watchTime: progressRecord?.watchTime || 0,
-          completed: progressRecord?.progress >= 100
-        };
-      });
-      
-      setStudentVideoProgress(videoProgressData);
     } catch (error) {
       console.error('Error in handleViewStudentProgress:', error);
       message.error('Failed to fetch student progress details');
     } finally {
       setStudentProgressLoading(false);
     }
+  };
+
+  const handlePreviewVideo = (video) => {
+    console.log('Preview requested for video:', video);
+    
+    // First check if we have a video object
+    if (!video) {
+      message.error('No video information available');
+      return;
+    }
+    
+    // Find video URL from various possible properties
+    let videoUrl = video.videoUrl || video.url || video.src || video.videoPath || video.filePath;
+    
+    // If no URL, show error and possibly prompt to edit
+    if (!videoUrl) {
+      if (video.id) {
+        Modal.confirm({
+          title: 'Missing Video URL',
+          content: 'This video has no URL. Would you like to edit this video to add a URL?',
+          onOk() {
+            handleEditVideo(video.id);
+          },
+          okText: 'Edit Video',
+          cancelText: 'Cancel',
+        });
+      } else {
+        message.error('This video has no URL. Please edit the video to add a URL.');
+      }
+      return;
+    }
+    
+    // Format YouTube URLs for embedding if needed
+    if (videoUrl.includes('youtube.com/watch?v=')) {
+      const videoId = videoUrl.split('v=')[1].split('&')[0];
+      videoUrl = `https://www.youtube.com/embed/${videoId}?autoplay=1`;
+    } 
+    // Format YouTube short URLs
+    else if (videoUrl.includes('youtu.be/')) {
+      const videoId = videoUrl.split('youtu.be/')[1].split('?')[0];
+      videoUrl = `https://www.youtube.com/embed/${videoId}?autoplay=1`;
+    }
+    // Format Vimeo URLs for embedding if needed
+    else if (videoUrl.includes('vimeo.com/')) {
+      const vimeoId = videoUrl.split('vimeo.com/')[1];
+      videoUrl = `https://player.vimeo.com/video/${vimeoId}?autoplay=1`;
+    }
+    // For direct video files, ensure they have proper protocol
+    else if (!videoUrl.startsWith('http') && !videoUrl.startsWith('//')) {
+      // If it's a relative path, convert to absolute
+      if (videoUrl.startsWith('/')) {
+        videoUrl = `${window.location.origin}${videoUrl}`;
+      } else {
+        // Try to create a valid URL by adding protocol
+        videoUrl = `https://${videoUrl}`;
+      }
+    }
+    
+    // Set the video URL and title for the preview modal
+    setCurrentVideoUrl(videoUrl);
+    setCurrentVideoTitle(video.title || 'Video Preview');
+    setVideoPreviewVisible(true);
+    console.log('Opening video preview with URL:', videoUrl);
+  };
+
+  const VideoPreviewModal = () => {
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(false);
+    
+    // Function to determine if the URL is a direct video file
+    const isDirectVideoFile = (url) => {
+      const videoExtensions = ['.mp4', '.webm', '.ogg', '.mov', '.avi', '.wmv', '.mkv'];
+      return videoExtensions.some(ext => url.toLowerCase().includes(ext));
+    };
+    
+    // Function to handle iframe load success
+    const handleIframeLoad = () => {
+      setLoading(false);
+    };
+    
+    // Function to handle iframe load error
+    const handleIframeError = (e) => {
+      console.error('Error loading video iframe:', e);
+      setLoading(false);
+      setError(true);
+    };
+    
+    // Function to handle video load error
+    const handleVideoError = (e) => {
+      console.error('Error loading video element:', e);
+      setLoading(false);
+      setError(true);
+    };
+    
+    return (
+      <Modal
+        title={currentVideoTitle}
+        open={videoPreviewVisible}
+        onCancel={() => setVideoPreviewVisible(false)}
+        footer={[
+          <Button key="close" onClick={() => setVideoPreviewVisible(false)}>
+            Close
+          </Button>,
+          <Button 
+            key="external" 
+            href={currentVideoUrl} 
+            target="_blank" 
+            rel="noopener noreferrer"
+            type="primary"
+          >
+            Open in New Tab
+          </Button>
+        ]}
+        width={800}
+        bodyStyle={{ padding: 0 }}
+        destroyOnClose
+      >
+        <div style={{ position: 'relative', paddingBottom: '56.25%', height: 0, overflow: 'hidden' }}>
+          {loading && (
+            <div style={{ 
+              position: 'absolute', 
+              top: 0, 
+              left: 0, 
+              width: '100%', 
+              height: '100%', 
+              display: 'flex', 
+              justifyContent: 'center', 
+              alignItems: 'center',
+              backgroundColor: '#f0f0f0'
+            }}>
+              <Spin size="large" tip="Loading video..." />
+            </div>
+          )}
+          
+          {error && (
+            <div style={{ 
+              position: 'absolute', 
+              top: 0, 
+              left: 0, 
+              width: '100%', 
+              height: '100%', 
+              display: 'flex', 
+              justifyContent: 'center', 
+              alignItems: 'center',
+              flexDirection: 'column',
+              backgroundColor: '#f0f0f0',
+              padding: '20px'
+            }}>
+              <p style={{ fontSize: '16px', color: '#f5222d', marginBottom: '16px' }}>
+                Failed to load video. The URL may be invalid or inaccessible.
+              </p>
+              <Button 
+                type="primary"
+                href={currentVideoUrl} 
+                target="_blank" 
+                rel="noopener noreferrer"
+              >
+                Try Opening in New Tab
+              </Button>
+            </div>
+          )}
+          
+          {isDirectVideoFile(currentVideoUrl) ? (
+            // Display HTML5 video player for direct video files
+            <video
+              controls
+              autoPlay
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: '100%',
+                borderRadius: '4px'
+              }}
+              onError={handleVideoError}
+              onLoadedData={() => setLoading(false)}
+            >
+              <source src={currentVideoUrl} />
+              Your browser does not support the video tag.
+            </video>
+          ) : (
+            // Use iframe for embedded videos (YouTube, Vimeo, etc.)
+            <iframe 
+              src={currentVideoUrl}
+              frameBorder="0"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: '100%',
+                borderRadius: '4px'
+              }}
+              onLoad={handleIframeLoad}
+              onError={handleIframeError}
+            />
+          )}
+        </div>
+        <div style={{ padding: '12px 24px', borderTop: '1px solid #f0f0f0', marginTop: '12px' }}>
+          <p style={{ margin: 0, color: '#888' }}>
+            If the video doesn't play correctly, try opening it in a new tab.
+          </p>
+        </div>
+      </Modal>
+    );
+  };
+
+  // Add a dropdown menu for the Edit Course button
+  const courseActionItems = [
+    {
+      key: 'edit',
+      icon: <EditOutlined />,
+      label: 'Edit Course Details',
+      onClick: handleEditCourse
+    },
+    {
+      key: 'videos',
+      icon: <VideoCameraOutlined />,
+      label: 'Manage Videos',
+      onClick: handleManageVideos
+    },
+    {
+      key: 'add-video',
+      icon: <PlusOutlined />,
+      label: 'Add New Video',
+      onClick: handleAddVideo
+    }
+  ];
+
+  // Add handler for video edit
+  const handleEditVideo = (videoId) => {
+    console.log('Navigating to edit video page for video ID:', videoId);
+    try {
+      window.location.href = `/teacher/courses/${courseId}/videos/${videoId}/edit`;
+    } catch (error) {
+      console.error('Error navigating to edit video:', error);
+      message.error('Failed to navigate to edit video page');
+    }
+  };
+
+  // Add function to update a student's progress
+  const updateStudentProgress = async (studentId, videoId, progressPercentage) => {
+    try {
+      console.log(`Updating progress for student ${studentId}, video ${videoId} to ${progressPercentage}%`);
+      
+      // Try to update the progress on the server
+      let updateSuccess = false;
+      
+      try {
+        // Try the main API endpoint first
+        await axios.post(`/api/courses/${courseId}/students/${studentId}/progress`, {
+          videoId,
+          progress: progressPercentage
+        });
+        updateSuccess = true;
+      } catch (e1) {
+        console.error('Failed to update progress with main API:', e1);
+        
+        try {
+          // Try teacher-specific endpoint
+          await axios.post(`/api/teacher/courses/${courseId}/students/${studentId}/progress`, {
+            videoId,
+            progress: progressPercentage
+          });
+          updateSuccess = true;
+        } catch (e2) {
+          console.error('Failed to update progress with teacher API:', e2);
+          
+          try {
+            // Try alternative endpoint format
+            await axios.post(`/api/student-progress/update`, {
+              courseId,
+              studentId,
+              videoId,
+              progress: progressPercentage
+            });
+            updateSuccess = true;
+          } catch (e3) {
+            console.error('Failed to update progress with alternative API:', e3);
+            message.error('Failed to update student progress. Please try again.');
+          }
+        }
+      }
+      
+      if (updateSuccess) {
+        // Find the student in our local state
+        const currentStudent = students.find(s => s.id === studentId);
+        if (!currentStudent) return;
+        
+        // Update the student's progress in the local state
+        const studentVideoProgress = currentStudent.videoProgress || [];
+        
+        // Update or add the video progress
+        const updatedVideoProgress = [...studentVideoProgress];
+        const existingVideoIndex = updatedVideoProgress.findIndex(vp => vp.videoId === videoId);
+        
+        if (existingVideoIndex >= 0) {
+          // Update existing video progress
+          updatedVideoProgress[existingVideoIndex] = {
+            ...updatedVideoProgress[existingVideoIndex],
+            progress: progressPercentage,
+            completed: progressPercentage >= 100
+          };
+        } else {
+          // Add new video progress
+          updatedVideoProgress.push({
+            videoId,
+            progress: progressPercentage,
+            completed: progressPercentage >= 100
+          });
+        }
+        
+        // Calculate new overall progress
+        const newOverallProgress = calculateOverallProgress(updatedVideoProgress, videos.length);
+        
+        // Update the student in our state
+        const updatedStudents = students.map(s => {
+          if (s.id === studentId) {
+            return {
+              ...s,
+              progress: newOverallProgress,
+              status: newOverallProgress >= 100 ? 'completed' : s.status,
+              grade: calculateGrade(newOverallProgress),
+              videoProgress: updatedVideoProgress
+            };
+          }
+          return s;
+        });
+        
+        // Update enrolled students too for consistency
+        const updatedEnrolledStudents = enrolledStudents.map(s => {
+          if (s.id === studentId) {
+            return {
+              ...s,
+              progress: newOverallProgress,
+              status: newOverallProgress >= 100 ? 'completed' : s.status,
+              grade: calculateGrade(newOverallProgress),
+              videoProgress: updatedVideoProgress
+            };
+          }
+          return s;
+        });
+        
+        // Update state
+        setStudents(updatedStudents);
+        setEnrolledStudents(updatedEnrolledStudents);
+        
+        // If this student is currently selected in the progress modal, update that too
+        if (selectedStudent && selectedStudent.id === studentId) {
+          setSelectedStudent({
+            ...selectedStudent,
+            progress: newOverallProgress,
+            status: newOverallProgress >= 100 ? 'completed' : selectedStudent.status,
+            grade: calculateGrade(newOverallProgress)
+          });
+          
+          // Also update the video progress display if the modal is open
+          if (studentProgressModalVisible) {
+            const updatedModalVideoProgress = studentVideoProgress.map(vp => {
+              if (vp.videoId === videoId) {
+                return {
+                  ...vp,
+                  progress: progressPercentage,
+                  completed: progressPercentage >= 100
+                };
+              }
+              return vp;
+            });
+            
+            setStudentVideoProgress(updatedModalVideoProgress);
+          }
+        }
+        
+        message.success(`Progress updated for ${currentStudent.fullName || currentStudent.username}`);
+      }
+    } catch (error) {
+      console.error('Error in updateStudentProgress:', error);
+      message.error('Failed to update student progress');
+    }
+  };
+
+  // Add a function to refresh a specific student's progress data
+  const refreshStudentProgress = async (studentId) => {
+    try {
+      setStudentProgressLoading(true);
+      
+      // Find the student in our local state
+      const student = students.find(s => s.id === studentId);
+      if (!student) {
+        message.error('Student not found');
+        return;
+      }
+      
+      // Re-fetch progress data
+      await handleViewStudentProgress(student);
+      
+      message.success('Student progress data refreshed');
+    } catch (error) {
+      console.error('Error refreshing student progress:', error);
+      message.error('Failed to refresh student progress data');
+    } finally {
+      setStudentProgressLoading(false);
+    }
+  };
+
+  // Add a button to manually update a student's video progress
+  const manuallyUpdateVideoProgress = (studentId, videoId, currentProgress) => {
+    Modal.confirm({
+      title: 'Update Video Progress',
+      content: (
+        <div>
+          <p>Set completion percentage for this video:</p>
+          <Slider 
+            defaultValue={currentProgress} 
+            marks={{
+              0: '0%',
+              25: '25%',
+              50: '50%',
+              75: '75%',
+              100: '100%'
+            }}
+          />
+        </div>
+      ),
+      onOk: () => {
+        // Get the value from the slider
+        const progressValue = document.querySelector('.ant-slider-handle').getAttribute('aria-valuenow');
+        updateStudentProgress(studentId, videoId, parseInt(progressValue));
+      }
+    });
   };
 
   if (loading) {
@@ -365,7 +1019,7 @@ const CourseView = ({ courseId: propsCourseId }) => {
         }
         image={Empty.PRESENTED_IMAGE_SIMPLE}
       >
-        <Space>
+            <Space>
           <Button type="primary" onClick={() => window.location.href = '/teacher/home'}>
             Back to Dashboard
           </Button>
@@ -380,7 +1034,19 @@ const CourseView = ({ courseId: propsCourseId }) => {
   // Add student progress modal
   const studentProgressModal = (
     <Modal
-      title={`Progress for ${selectedStudent?.fullName || selectedStudent?.username || 'Student'}`}
+      title={
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>Progress for {selectedStudent?.fullName || selectedStudent?.username || 'Student'}</span>
+              <Button 
+            icon={<ReloadOutlined />} 
+            onClick={() => refreshStudentProgress(selectedStudent?.id)}
+            loading={studentProgressLoading}
+            size="small"
+          >
+            Refresh Data
+              </Button>
+        </div>
+      }
       open={studentProgressModalVisible}
       onCancel={() => setStudentProgressModalVisible(false)}
       footer={[
@@ -478,159 +1144,191 @@ const CourseView = ({ courseId: propsCourseId }) => {
       
       <Divider orientation="left">Video Progress</Divider>
       
-      <Table
-        dataSource={studentVideoProgress}
-        rowKey="id"
-        loading={studentProgressLoading}
-        style={{ 
-          background: '#fff',
-          borderRadius: '8px',
-          overflow: 'hidden',
-          boxShadow: '0 2px 8px rgba(0,0,0,0.05)'
-        }}
-        columns={[
-          {
-            title: 'Video',
-            dataIndex: 'title',
-            key: 'title',
-            render: (title, video, index) => (
-              <Space align="start">
-                <Avatar 
-                  shape="square" 
-                  size={48} 
-                  src={video.thumbnail} 
-                  icon={<PlayCircleOutlined />}
-                  style={{ borderRadius: '4px' }}
-                />
-                <div>
-                  <div style={{ fontWeight: 500 }}>{index + 1}. {title}</div>
-                  {video.description && (
-                    <Paragraph 
-                      ellipsis={{ rows: 1 }} 
-                      type="secondary" 
-                      style={{ marginBottom: 0, fontSize: '12px' }}
-                    >
-                      {video.description}
-                    </Paragraph>
-                  )}
-                </div>
-              </Space>
-            )
-          },
-          {
-            title: 'Duration',
-            dataIndex: 'duration',
-            key: 'duration',
-            width: 100,
-            render: duration => (
-              <Text type="secondary">{duration || 'N/A'}</Text>
-            )
-          },
-          {
-            title: 'Watch Time',
-            dataIndex: 'watchTime',
-            key: 'watchTime',
-            width: 120,
-            render: (watchTime) => {
-              // Convert seconds to a readable format
-              if (!watchTime) return <Text type="secondary">Not viewed</Text>;
-              
-              const minutes = Math.floor(watchTime / 60);
-              const seconds = watchTime % 60;
-              return <Text>{minutes}m {seconds}s</Text>;
-            }
-          },
-          {
-            title: 'Last Watched',
-            dataIndex: 'lastWatched',
-            key: 'lastWatched',
-            width: 130,
-            render: date => (
-              date ? (
-                <Text>{formatDate(date)}</Text>
-              ) : (
-                <Text type="secondary">Not viewed</Text>
+      {studentProgressLoading ? (
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '40px 0' }}>
+          <Spin size="large" tip="Loading progress data..." />
+        </div>
+      ) : (
+        <Table
+          dataSource={studentVideoProgress}
+          rowKey="id"
+          style={{ 
+            background: '#fff',
+            borderRadius: '8px',
+            overflow: 'hidden',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.05)'
+          }}
+          columns={[
+            {
+              title: 'Video',
+              dataIndex: 'title',
+              key: 'title',
+              render: (title, video, index) => (
+                <Space align="start">
+                  <Avatar 
+                    shape="square" 
+                    size={48} 
+                    src={video.thumbnail} 
+                    icon={<PlayCircleOutlined />}
+                    style={{ borderRadius: '4px' }}
+                  />
+                  <div>
+                    <div style={{ fontWeight: 500 }}>{index + 1}. {title}</div>
+                    {video.description && (
+                      <Paragraph 
+                        ellipsis={{ rows: 1 }} 
+                        type="secondary" 
+                        style={{ marginBottom: 0, fontSize: '12px' }}
+                      >
+                        {video.description}
+                      </Paragraph>
+                    )}
+                  </div>
+          </Space>
               )
-            )
-          },
-          {
-            title: 'Progress',
-            dataIndex: 'progress',
-            key: 'progress',
-            width: 160,
-            render: progress => (
-              <div>
-                <Progress
-                  percent={progress}
-                  size="small"
-                  status={progress >= 100 ? 'success' : 'active'}
-                  strokeColor={getProgressColor(progress)}
-                />
-                <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>
-                  {progress === 100 ? 'Completed' : 
-                   progress > 0 ? `${progress}% complete` : 'Not started'}
+            },
+            {
+              title: 'Duration',
+              dataIndex: 'duration',
+              key: 'duration',
+              width: 100,
+              render: duration => (
+                <Text type="secondary">{duration || 'N/A'}</Text>
+              )
+            },
+            {
+              title: 'Watch Time',
+              dataIndex: 'watchTime',
+              key: 'watchTime',
+              width: 120,
+              render: (watchTime) => {
+                // Convert seconds to a readable format
+                if (!watchTime) return <Text type="secondary">Not viewed</Text>;
+                
+                const minutes = Math.floor(watchTime / 60);
+                const seconds = watchTime % 60;
+                return <Text>{minutes}m {seconds}s</Text>;
+              }
+            },
+            {
+              title: 'Last Watched',
+              dataIndex: 'lastWatched',
+              key: 'lastWatched',
+              width: 130,
+              render: date => (
+                date ? (
+                  <Text>{formatDate(date)}</Text>
+                ) : (
+                  <Text type="secondary">Not viewed</Text>
+                )
+              )
+      },
+      {
+        title: 'Progress',
+              dataIndex: 'progress',
+        key: 'progress',
+              width: 160,
+              render: progress => (
+                <div>
+                  <Progress
+                    percent={progress}
+                    size="small"
+                    status={progress >= 100 ? 'success' : 'active'}
+                    strokeColor={getProgressColor(progress)}
+                  />
+                  <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>
+                    {progress === 100 ? 'Completed' : 
+                     progress > 0 ? `${progress}% complete` : 'Not started'}
+                  </div>
                 </div>
+              )
+            },
+            {
+              title: 'Status',
+              key: 'status',
+              width: 110,
+              render: (_, video) => (
+                <Tag 
+                  color={
+                    video.progress >= 100 ? 'green' : 
+                    video.progress > 0 ? 'blue' : 
+                    'gray'
+                  }
+                  style={{ textTransform: 'capitalize' }}
+                >
+                  {video.progress >= 100 ? 'Completed' : 
+                   video.progress > 0 ? 'In Progress' : 
+                   'Not Started'}
+                </Tag>
+              )
+            },
+            {
+              title: 'Actions',
+              key: 'actions',
+              width: 100,
+              render: (_, video) => (
+          <Button 
+                  size="small"
+                  onClick={() => manuallyUpdateVideoProgress(selectedStudent?.id, video.id, video.progress)}
+                  icon={<EditOutlined />}
+          >
+                  Set
+          </Button>
+              )
+            }
+          ]}
+          pagination={false}
+          summary={pageData => {
+            const completedVideos = pageData.filter(v => v.progress >= 100).length;
+            const totalVideos = pageData.length;
+            const completionPercentage = totalVideos > 0 ? Math.round((completedVideos / totalVideos) * 100) : 0;
+            const totalWatchTime = pageData.reduce((total, video) => total + (video.watchTime || 0), 0);
+            
+            // Convert total watch time to hours, minutes, seconds
+            const hours = Math.floor(totalWatchTime / 3600);
+            const minutes = Math.floor((totalWatchTime % 3600) / 60);
+            const seconds = totalWatchTime % 60;
+    
+    return (
+              <Table.Summary.Row>
+                <Table.Summary.Cell index={0} colSpan={7}>
+                  <Row gutter={16} align="middle">
+                    <Col span={14}>
+                      <Text strong>
+                        Completed {completedVideos} of {totalVideos} videos ({completionPercentage}%)
+                      </Text>
+                    </Col>
+                    <Col span={10}>
+                      <div>
+                        <Text>Total watch time: </Text>
+                        <Text strong>{hours > 0 ? `${hours}h ` : ''}{minutes}m {seconds}s</Text>
               </div>
-            )
-          },
-          {
-            title: 'Status',
-            key: 'status',
-            width: 110,
-            render: (_, video) => (
-              <Tag 
-                color={
-                  video.progress >= 100 ? 'green' : 
-                  video.progress > 0 ? 'blue' : 
-                  'gray'
-                }
-                style={{ textTransform: 'capitalize' }}
-              >
-                {video.progress >= 100 ? 'Completed' : 
-                 video.progress > 0 ? 'In Progress' : 
-                 'Not Started'}
-              </Tag>
-            )
-          }
-        ]}
-        pagination={false}
-        summary={pageData => {
-          const completedVideos = pageData.filter(v => v.progress >= 100).length;
-          const totalVideos = pageData.length;
-          const completionPercentage = totalVideos > 0 ? Math.round((completedVideos / totalVideos) * 100) : 0;
-          const totalWatchTime = pageData.reduce((total, video) => total + (video.watchTime || 0), 0);
-          
-          // Convert total watch time to hours, minutes, seconds
-          const hours = Math.floor(totalWatchTime / 3600);
-          const minutes = Math.floor((totalWatchTime % 3600) / 60);
-          const seconds = totalWatchTime % 60;
-          
-          return (
-            <Table.Summary.Row>
-              <Table.Summary.Cell index={0} colSpan={6}>
-                <Row gutter={16} align="middle">
-                  <Col span={14}>
-                    <Text strong>
-                      Completed {completedVideos} of {totalVideos} videos ({completionPercentage}%)
-                    </Text>
-                  </Col>
-                  <Col span={10}>
-                    <div>
-                      <Text>Total watch time: </Text>
-                      <Text strong>{hours > 0 ? `${hours}h ` : ''}{minutes}m {seconds}s</Text>
-                    </div>
-                    <Progress 
-                      percent={completionPercentage} 
-                      size="small" 
-                      style={{ marginTop: 5 }}
-                      strokeColor={getProgressColor(completionPercentage)}
-                    />
-                  </Col>
-                </Row>
-              </Table.Summary.Cell>
-            </Table.Summary.Row>
-          );
-        }}
+                <Progress 
+                        percent={completionPercentage} 
+                        size="small" 
+                        style={{ marginTop: 5 }}
+                        strokeColor={getProgressColor(completionPercentage)}
+                      />
+                    </Col>
+                  </Row>
+                </Table.Summary.Cell>
+              </Table.Summary.Row>
+            );
+          }}
+        />
+      )}
+      
+      <Alert 
+        type="info" 
+        showIcon
+        style={{ marginTop: 24 }}
+        message="How Progress is Calculated"
+        description={
+              <div>
+            <p>Each video contributes equally to the overall course progress. The progress is calculated as the average completion percentage across all videos.</p>
+            <p>If progress data seems incorrect, click "Refresh Data" to fetch the latest information, or manually set video progress using the "Set" button.</p>
+          </div>
+        }
       />
     </Modal>
   );
@@ -673,9 +1371,11 @@ const CourseView = ({ courseId: propsCourseId }) => {
           <Col xs={24} md={16}>
             <Paragraph style={{ fontSize: 16, marginBottom: 24 }}>{course.description}</Paragraph>
             <Space>
-              <Button type="primary" icon={<EditOutlined />} onClick={handleEditCourse}>
-                Edit Course
-              </Button>
+              <Dropdown menu={{ items: courseActionItems }} placement="bottomLeft">
+                <Button type="primary" icon={<EditOutlined />}>
+                  Manage Course
+                </Button>
+              </Dropdown>
             </Space>
           </Col>
           <Col xs={24} md={8}>
@@ -695,9 +1395,9 @@ const CourseView = ({ courseId: propsCourseId }) => {
                     prefix={<UsergroupAddOutlined />}
                     valueStyle={{ color: '#1890ff' }}
                   />
-                </Card>
-              </Col>
-              <Col span={12}>
+            </Card>
+          </Col>
+          <Col span={12}>
                 <Card 
                   size="small"
                   style={{ 
@@ -747,8 +1447,8 @@ const CourseView = ({ courseId: propsCourseId }) => {
                     value={formatDate(course.createdAt)}
                     prefix={<ClockCircleOutlined />}
                     valueStyle={{ fontSize: '14px' }}
-                  />
-                </Card>
+              />
+            </Card>
               </Col>
             </Row>
           </Col>
@@ -775,14 +1475,14 @@ const CourseView = ({ courseId: propsCourseId }) => {
             children: (
               <div style={{ padding: '16px 0' }}>
                 {videos.length === 0 && !loading ? (
-                  <Empty 
-                    description={
+      <Empty
+        description={
                       <div>
                         <p>No videos have been added to this course yet.</p>
                         <Button 
                           type="primary" 
                           icon={<PlusOutlined />}
-                          onClick={() => window.location.href = `/teacher/courses/${courseId}/videos/add`}
+                          onClick={handleAddVideo}
                         >
                           Add Video
                         </Button>
@@ -796,7 +1496,7 @@ const CourseView = ({ courseId: propsCourseId }) => {
                       <Button 
                         type="primary" 
                         icon={<PlusOutlined />}
-                        onClick={() => window.location.href = `/teacher/courses/${courseId}/videos/add`}
+                        onClick={handleAddVideo}
                       >
                         Add Video
                       </Button>
@@ -818,21 +1518,22 @@ const CourseView = ({ courseId: propsCourseId }) => {
                             boxShadow: '0 2px 5px rgba(0,0,0,0.03)'
                           }}
                           actions={[
-                            <Button 
-                              type="primary" 
+                    <Button 
+                      type="primary" 
                               ghost
-                              icon={<EditOutlined />}
-                              onClick={() => window.location.href = `/teacher/courses/${courseId}/videos/${video.id}/edit`}
-                            >
+                      icon={<EditOutlined />} 
+                              onClick={() => handleEditVideo(video.id)}
+                    >
                               Edit
                             </Button>,
-                            <Button 
+                    <Button 
                               type="default" 
                               icon={<PlayCircleOutlined />}
-                              onClick={() => window.open(video.videoUrl || video.url, '_blank')}
+                              onClick={() => handlePreviewVideo(video)}
+                              disabled={!video.hasValidUrl}
                             >
                               Preview
-                            </Button>
+                    </Button>
                           ]}
                         >
             <List.Item.Meta
@@ -859,6 +1560,9 @@ const CourseView = ({ courseId: propsCourseId }) => {
                                   {video.isPremium && (
                                     <Tag color="#722ed1">Premium</Tag>
                                   )}
+                                  {!video.hasValidUrl && (
+                                    <Tag color="red">Missing URL</Tag>
+                                  )}
                                 </div>
                               </div>
                             }
@@ -870,7 +1574,7 @@ const CourseView = ({ courseId: propsCourseId }) => {
                                   <Text type="secondary">
                                     Added {formatDate(video.createdAt)}
                                   </Text>
-                                </Space>
+                  </Space>
                                 
                                 {video.description && (
                                   <Paragraph ellipsis={{ rows: 2 }} type="secondary">
@@ -901,8 +1605,8 @@ const CourseView = ({ courseId: propsCourseId }) => {
                                       suffix={`/5`}
                                       precision={1}
                                     />
-                                  </Col>
-                                </Row>
+              </Col>
+            </Row>
             </Space>
                             }
                           />
@@ -941,8 +1645,8 @@ const CourseView = ({ courseId: propsCourseId }) => {
                         value={students.length}
                         valueStyle={{ color: '#1890ff' }}
                       />
-                    </Card>
-                  </Col>
+          </Card>
+        </Col>
                   <Col xs={24} sm={8}>
                     <Card 
                       size="small"
@@ -974,9 +1678,9 @@ const CourseView = ({ courseId: propsCourseId }) => {
                         suffix={`/${students.length}`}
                         valueStyle={{ color: '#722ed1' }}
                       />
-                    </Card>
-                  </Col>
-                </Row>
+          </Card>
+        </Col>
+      </Row>
                 
                 <Table
                   dataSource={students}
@@ -1185,6 +1889,9 @@ const CourseView = ({ courseId: propsCourseId }) => {
       
       {/* Student Progress Modal */}
       {studentProgressModal}
+      
+      {/* Video Preview Modal */}
+      <VideoPreviewModal />
     </Layout.Content>
   );
 };

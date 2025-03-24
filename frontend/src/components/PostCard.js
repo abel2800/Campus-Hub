@@ -375,11 +375,15 @@ const PostCard = ({ post, currentUser, onDelete, allowDelete = false }) => {
   return (
     <PostContainer>
       <PostHeader>
-        <UserInfo onClick={() => navigate(`/profile/${post.user.username}`)}>
+        <UserInfo 
+          onClick={() => navigate(`/profile/${post.user.username}`)}
+          style={{ cursor: 'pointer' }}
+        >
           <Avatar 
             src={getImageUrl(post.user.avatar)} 
             icon={<UserOutlined />}
             size={40}
+            style={{ cursor: 'pointer' }}
           />
           <div style={{ marginLeft: 12 }}>
             <Username strong>{post.user.fullName || post.user.username}</Username>
@@ -453,10 +457,16 @@ const PostCard = ({ post, currentUser, onDelete, allowDelete = false }) => {
                     src={getImageUrl(comment.user.avatar)} 
                     icon={<UserOutlined />}
                     size="small"
+                    style={{ cursor: 'pointer' }}
+                    onClick={() => navigate(`/profile/${comment.user.username}`)}
                   />
                   <CommentContent>
                     <CommentHeader>
-                      <Text strong style={{ fontSize: 14 }}>
+                      <Text 
+                        strong 
+                        style={{ fontSize: 14, cursor: 'pointer' }}
+                        onClick={() => navigate(`/profile/${comment.user.username}`)}
+                      >
                         {comment.user.username}
                       </Text>
                       <Space>

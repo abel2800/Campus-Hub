@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import styled from 'styled-components';
 import { Input, Avatar, Upload, Button, message, Spin, Empty, Divider, List, Tooltip, Badge } from 'antd';
-import { SendOutlined, PictureOutlined, SearchOutlined, UserAddOutlined, MailOutlined } from '@ant-design/icons';
+import { SendOutlined, PictureOutlined, SearchOutlined, UserAddOutlined, MailOutlined, UserOutlined } from '@ant-design/icons';
 import api from '../utils/axios';
 import { useSocket } from '../contexts/SocketContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -272,14 +272,6 @@ const ChatPage = () => {
       
       setLoading(true);
       
-      const formData = new FormData();
-      formData.append('participant_id', selectedFriend.id);
-      formData.append('content', messageInput);
-      
-      if (attachment) {
-        formData.append('attachment', attachment);
-      }
-
       // Clear input fields immediately for better UX
       const currentInput = messageInput;
       const currentAttachment = attachment;
@@ -287,26 +279,20 @@ const ChatPage = () => {
       setAttachment(null);
       
       try {
-        const response = await api.post('/api/messages/send', formData, {
-          headers: {
-            'Content-Type': 'multipart/form-data'
-          }
+        // Use the correct parameter names that match the backend controller
+        const response = await api.post('/api/messages/send', {
+          participantId: selectedFriend.id,
+          content: currentInput
         });
         
-        if (response.data && response.data.message) {
+        console.log('Message sent successfully:', response.data);
+        
+        if (response.data) {
           // Add the new message to the messages list
-          setMessages(prevMessages => [...(Array.isArray(prevMessages) ? prevMessages : []), response.data.message]);
-          
-          // Emit the message through socket if connected
-          if (socket && socket.connected) {
-            socket.emit('send_message', { 
-              message: response.data.message,
-              to: selectedFriend.id 
-            });
-          }
+          setMessages(prevMessages => [...(Array.isArray(prevMessages) ? prevMessages : []), response.data]);
           
           // Scroll to bottom
-      scrollToBottom();
+          scrollToBottom();
           
           // Refresh recent chats
           loadRecentChats();
@@ -544,6 +530,8 @@ const ChatPage = () => {
       );
     }
     
+    console.log('Rendering messages:', messages);
+    
     return (
       <div style={{ 
         height: '100%', 
@@ -552,8 +540,19 @@ const ChatPage = () => {
       }}>
         {messages.map((message, index) => {
           if (!message) return null;
+          
+          // Check if we have valid message data
+          if (!message.sender_id && !message.receiver_id) {
+            console.error('Invalid message format:', message);
+            return null;
+          }
+          
           const isCurrentUser = message.sender_id === user?.id;
-          const senderName = isCurrentUser ? user?.username : selectedFriend?.username;
+          const messageUser = isCurrentUser ? message.sender : message.receiver;
+          
+          // Fallback values if sender/receiver details are missing
+          const senderName = messageUser?.username || (isCurrentUser ? user?.username : selectedFriend?.username) || 'Unknown User';
+          const senderAvatar = messageUser?.avatar || (isCurrentUser ? user?.avatar : selectedFriend?.avatar);
           
           return (
             <div 
@@ -565,7 +564,8 @@ const ChatPage = () => {
               }}
             >
               <Avatar 
-                src={isCurrentUser ? user?.avatar : selectedFriend?.avatar}
+                src={senderAvatar}
+                icon={<UserOutlined />}
                 style={{ 
                   marginLeft: isCurrentUser ? '12px' : '0',
                   marginRight: isCurrentUser ? '0' : '12px',
@@ -584,7 +584,7 @@ const ChatPage = () => {
                 }}
               >
                 <div style={{ marginBottom: '4px', fontSize: '13px', fontWeight: 'bold' }}>
-                  {senderName || 'Unknown User'}
+                  {senderName}
                 </div>
                 <div>{message.content}</div>
                 <div style={{ 
@@ -725,30 +725,29 @@ const ChatPage = () => {
                 style={{ padding: '40px 0' }}
               />
             ) : (
-              recentChats && Array.isArray(recentChats) ? (
-                recentChats
-                  .filter(chat => 
-                    chat && 
-                    ((chat.sender_id === user?.id && chat.receiver) || 
-                     (chat.sender_id !== user?.id && chat.sender))
-                  )
+              <div>
+                {recentChats
+                  .filter(chat => {
+                    // Make sure the chat has valid participant data
+                    return chat && chat.participant && (chat.content || chat.lastMessage?.content);
+                  })
                   .map(chat => {
-                    if (!chat) return null;
+                    const friend = chat.participant;
                     
-                    const friend = chat.sender_id === user?.id ? 
-                      (chat.receiver || null) : 
-                      (chat.sender || null);
-                      
-                    if (!friend || !friend.id) return null;
+                    if (!friend || !friend.id) {
+                      return null;
+                    }
                     
                     const isSelected = selectedFriend?.id === friend.id;
+                    const lastMessage = chat.content || chat.lastMessage?.content || 'Start a conversation';
+                    const messageTime = chat.created_at || chat.createdAt || chat.lastMessage?.createdAt;
                     
                     return (
                       <div 
-                        key={chat.id || `${friend.id}-${chat.lastMessage?.id || 'new'}`}
-            onClick={() => {
-              setSelectedFriend(friend);
-              loadMessageHistory(friend.id);
+                        key={chat.id || `chat-${friend.id}`}
+                        onClick={() => {
+                          setSelectedFriend(friend);
+                          loadMessageHistory(friend.id);
                           navigate(`/chat/${friend.id}`, { replace: true });
                         }}
                         style={{ 
@@ -762,7 +761,8 @@ const ChatPage = () => {
                         }}
                       >
                         <Avatar 
-                          src={friend.avatar} 
+                          src={friend.avatar}
+                          icon={<UserOutlined />}
                           size={40}
                           style={{ marginRight: '12px', flexShrink: 0 }}
                         />
@@ -786,7 +786,7 @@ const ChatPage = () => {
                               flexShrink: 0,
                               marginLeft: '8px'
                             }}>
-                              {formatTime(chat.lastMessage?.createdAt || chat.lastMessage?.created_at || chat.createdAt || chat.created_at)}
+                              {formatTime(messageTime)}
                             </div>
                           </div>
                           <div style={{ 
@@ -796,13 +796,13 @@ const ChatPage = () => {
                             overflow: 'hidden',
                             textOverflow: 'ellipsis'
                           }}>
-                            {chat.content || chat.lastMessage?.content || 'Start a conversation'}
+                            {lastMessage}
                           </div>
                         </div>
                       </div>
                     );
-                  }).filter(Boolean)
-              ) : null
+                  })}
+              </div>
             )
           ) : (
             loadingFriends ? (
@@ -860,8 +860,8 @@ const ChatPage = () => {
                           }}>
                             {friendData.department || 'Start a conversation'}
                           </div>
-            </div>
-          </div>
+                        </div>
+                      </div>
                     );
                   })
               ) : (

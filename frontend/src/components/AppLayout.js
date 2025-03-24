@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Layout, Menu, Badge, Avatar, Dropdown, Space } from 'antd';
+import { Layout, Menu, Badge, Avatar, Dropdown, Space, message } from 'antd';
 import { 
   HomeOutlined, 
   BookOutlined, 
@@ -23,6 +23,12 @@ const { Header, Sider, Content } = Layout;
 const AppLayout = ({ children }) => {
   const [collapsed, setCollapsed] = useState(false);
   const location = useLocation();
+  const { user, logout, isTeacher } = useAuth();
+  const navigate = useNavigate();
+  
+  // Add notification content
+  const [notifications, setNotifications] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   const toggleSidebar = () => {
     setCollapsed(!collapsed);
@@ -49,9 +55,18 @@ const AppLayout = ({ children }) => {
     return '1';
   };
 
-  // Get the current user
-  const { user, logout, isTeacher } = useAuth();
-  const navigate = useNavigate();
+  // Define handleLogout before it's used
+  const handleLogout = async () => {
+    try {
+      await logout();
+      console.log('Logged out successfully');
+      // Redirect to login page
+      navigate('/login');
+    } catch (error) {
+      console.error('Error logging out:', error);
+      message.error('Failed to log out');
+    }
+  };
 
   // Add profile menu items
   const profileMenu = (
@@ -63,15 +78,11 @@ const AppLayout = ({ children }) => {
         Settings
       </Menu.Item>
       <Menu.Divider />
-      <Menu.Item key="logout" icon={<LogoutOutlined />} onClick={logout}>
+      <Menu.Item key="logout" icon={<LogoutOutlined />} onClick={handleLogout}>
         Logout
       </Menu.Item>
     </Menu>
   );
-
-  // Add notification content
-  const [notifications, setNotifications] = useState([]);
-  const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
     // Fetch notifications on mount

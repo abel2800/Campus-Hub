@@ -15,7 +15,9 @@ import {
   BellOutlined,
   SettingOutlined,
   LogoutOutlined,
-  HomeOutlined
+  HomeOutlined,
+  GlobalOutlined,
+  EyeOutlined
 } from '@ant-design/icons';
 import { useNavigate, useLocation, Outlet, Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
@@ -64,6 +66,7 @@ const TeacherLayout = () => {
   const { user, logout } = useAuth();
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
     // Fetch notifications on load
@@ -167,7 +170,22 @@ const TeacherLayout = () => {
     </Menu>
   );
 
-  const userMenu = (
+  const toggleCollapsed = () => {
+    setCollapsed(!collapsed);
+  };
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      console.log('Teacher logged out successfully');
+      navigate('/login');
+    } catch (error) {
+      console.error('Error logging out:', error);
+      message.error('Failed to log out');
+    }
+  };
+
+  const menu = (
     <Menu>
       <Menu.Item key="profile" icon={<UserOutlined />} onClick={() => navigate('/profile')}>
         My Profile
@@ -175,12 +193,11 @@ const TeacherLayout = () => {
       <Menu.Item key="settings" icon={<SettingOutlined />} onClick={() => navigate('/settings')}>
         Settings
       </Menu.Item>
-      <Menu.Divider />
-      <Menu.Item key="student-view" icon={<HomeOutlined />} onClick={() => navigate('/')}>
+      <Menu.Item key="student-view" icon={<EyeOutlined />} onClick={() => navigate('/home')}>
         Switch to Student View
       </Menu.Item>
       <Menu.Divider />
-      <Menu.Item key="logout" icon={<LogoutOutlined />} onClick={logout}>
+      <Menu.Item key="logout" icon={<LogoutOutlined />} onClick={handleLogout}>
         Logout
       </Menu.Item>
     </Menu>
@@ -193,13 +210,28 @@ const TeacherLayout = () => {
       label: 'Dashboard',
     },
     {
+      key: '/teacher/courses',
+      icon: <BookOutlined />,
+      label: 'My Courses',
+    },
+    {
       key: '/teacher/create-course',
       icon: <PlusOutlined />,
       label: 'Create Course',
     },
     {
-      key: '/teacher/students',
+      key: '/social-media',
+      icon: <GlobalOutlined />,
+      label: 'Social Media',
+    },
+    {
+      key: '/friends',
       icon: <TeamOutlined />,
+      label: 'Friends',
+    },
+    {
+      key: '/teacher/students',
+      icon: <UserOutlined />,
       label: 'Students',
     },
     {
@@ -260,7 +292,7 @@ const TeacherLayout = () => {
               </NotificationBadge>
             </Dropdown>
             
-            <Dropdown overlay={userMenu} trigger={['click']} placement="bottomRight">
+            <Dropdown overlay={menu} trigger={['click']} placement="bottomRight">
               <Space>
                 <Avatar 
                   src={user?.avatar} 

@@ -118,51 +118,55 @@ const friendController = {
       const senderId = req.user.id;
       const { receiverId } = req.body;
 
-      // Check if users are already friends
+      // Validate receiver ID
+      if (!receiverId) {
+        return res.status(400).json({ message: 'Receiver ID is required' });
+      }
+
+      // Check if users exist
+      const sender = await User.findByPk(senderId);
+      const receiver = await User.findByPk(receiverId);
+
+      if (!sender || !receiver) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+
+      // Check if friendship already exists or is pending
       const existingFriendship = await Friend.findOne({
         where: {
           [Op.or]: [
-            { userId: senderId, friendId: receiverId },
-            { userId: receiverId, friendId: senderId }
+            { 
+              userId: senderId, 
+              friendId: receiverId 
+            },
+            { 
+              userId: receiverId, 
+              friendId: senderId 
+            }
           ]
         }
       });
 
       if (existingFriendship) {
-        return res.status(400).json({ message: 'Already friends' });
+        return res.status(400).json({ message: 'Friend request already exists or users are already friends' });
       }
 
-      // Check if request already exists
-      const existingRequest = await FriendRequest.findOne({
-        where: {
-          [Op.or]: [
-            { senderId, receiverId },
-            { senderId: receiverId, receiverId: senderId }
-          ]
-        }
-      });
-
-      if (existingRequest) {
-        return res.status(400).json({ message: 'Friend request already exists' });
-      }
-
-      // Create friend request
-      const request = await FriendRequest.create({
-        senderId,
-        receiverId,
+      // Create friendship record with pending status
+      const friendship = await Friend.create({
+        userId: senderId,
+        friendId: receiverId,
         status: 'pending'
       });
 
-      // Create notification for receiver
-      await Notification.create({
-        userId: receiverId,
-        type: 'friend_request',
-        content: 'You have a new friend request',
-        read: false,
-        relatedId: senderId
-      });
+      // Create notification for the receiver
+      const notificationController = require('./notificationController');
+      await notificationController.createFriendRequestNotification(
+        receiverId,
+        senderId,
+        sender.username
+      );
 
-      res.status(201).json(request);
+      res.status(201).json({ message: 'Friend request sent successfully' });
     } catch (error) {
       console.error('Send friend request error:', error);
       res.status(500).json({ message: 'Server error' });

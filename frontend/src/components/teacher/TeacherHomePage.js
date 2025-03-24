@@ -27,12 +27,7 @@ const TeacherHomePage = () => {
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
     totalStudents: 0,
-    totalCourses: 0,
-    totalRevenue: 0,
-    averageRating: 0,
-    studentIncrease: 0,
-    revenueIncrease: 0,
-    activeStudents: 0
+    totalCourses: 0
   });
   const [courses, setCourses] = useState([]);
   
@@ -48,35 +43,11 @@ const TeacherHomePage = () => {
       try {
         // Set demo data immediately for faster rendering
         setStats({
-          totalStudents: 124,
-          totalCourses: 7,
-          totalRevenue: 3280,
-          averageRating: 4.7,
-          studentIncrease: 12,
-          revenueIncrease: 8,
-          activeStudents: 98
+          totalStudents: 0,
+          totalCourses: 0
         });
         
-        setCourses([
-          { 
-            id: 1, 
-            title: 'Introduction to React', 
-            enrollmentCount: 42, 
-            category: 'programming', 
-            rating: 4.8, 
-            isArchived: false,
-            description: 'A comprehensive introduction to React for beginners'
-          },
-          { 
-            id: 2, 
-            title: 'Advanced JavaScript', 
-            enrollmentCount: 36, 
-            category: 'programming', 
-            rating: 4.6, 
-            isArchived: false,
-            description: 'Take your JavaScript skills to the next level'
-          }
-        ]);
+        setCourses([]);
         
         // Set loading false to show content from demo data
         setLoading(false);
@@ -109,20 +80,28 @@ const TeacherHomePage = () => {
     try {
       console.log('Fetching teacher dashboard stats');
       // Fetch dashboard statistics
-      const statsResponse = await api.get('/api/teacher/dashboard/stats');
-      console.log('Stats response:', statsResponse.data);
-      setStats(statsResponse.data);
+      const response = await api.get('/api/teacher/courses');
+      console.log('Courses response:', response.data);
+      
+      // Calculate stats from actual courses data
+      const courseCount = response.data.length;
+      
+      // Calculate total enrolled students across all courses
+      let totalEnrolled = 0;
+      response.data.forEach(course => {
+        totalEnrolled += (course.enrollmentCount || 0);
+      });
+      
+      setStats({
+        totalStudents: totalEnrolled,
+        totalCourses: courseCount
+      });
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
-      // Set sample data for demo purposes
+      // Set zeros for stats on error
       setStats({
-        totalStudents: 124,
-        totalCourses: 7,
-        totalRevenue: 3280,
-        averageRating: 4.7,
-        studentIncrease: 12,
-        revenueIncrease: 8,
-        activeStudents: 98
+        totalStudents: 0,
+        totalCourses: 0
       });
     } finally {
       setLoading(false);
@@ -249,48 +228,26 @@ const TeacherHomePage = () => {
           <Title level={2}>Teacher Dashboard</Title>
           
           <Row gutter={[24, 24]}>
-            <Col xs={24} sm={12} lg={6}>
+            <Col xs={24} sm={12}>
               <Card style={statsCardStyle}>
                 <Statistic
-                  title="Total Students"
+                  title="Total Students Enrolled"
                   value={stats.totalStudents}
                   prefix={<TeamOutlined />}
                 />
               </Card>
             </Col>
-            <Col xs={24} sm={12} lg={6}>
+            <Col xs={24} sm={12}>
               <Card style={statsCardStyle}>
                 <Statistic
-                  title="Total Courses"
+                  title="Your Courses"
                   value={stats.totalCourses}
                   prefix={<BookOutlined />}
                 />
               </Card>
             </Col>
-            <Col xs={24} sm={12} lg={6}>
-              <Card style={statsCardStyle}>
-                <Statistic
-                  title="Total Revenue"
-                  value={stats.totalRevenue}
-                  precision={2}
-                  prefix={<DollarOutlined />}
-                  suffix="$"
-                />
-              </Card>
-            </Col>
-            <Col xs={24} sm={12} lg={6}>
-              <Card style={statsCardStyle}>
-                <Statistic
-                  title="Avg. Rating"
-                  value={stats.averageRating}
-                  precision={1}
-                  prefix={<StarOutlined />}
-                  suffix="/5"
-                />
-              </Card>
-            </Col>
           </Row>
-          
+
           <div style={{ marginTop: 24 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <Title level={3}>Course Management</Title>
@@ -300,16 +257,16 @@ const TeacherHomePage = () => {
                 </Button>
                 <Button type="default" onClick={handleViewAllCourses}>
                   Manage Courses
-                </Button>
+            </Button>
               </Space>
             </div>
           </div>
           
           {/* Course Management Section */}
-          <Card
+                <Card
             title={
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span>Course Management</span>
+                <span>Your Courses</span>
               </div>
             }
             style={{ marginBottom: 24 }}
@@ -342,12 +299,9 @@ const TeacherHomePage = () => {
                             <Button 
                           type="link" 
                               icon={<EyeOutlined />} 
-                          onClick={() => {
-                            console.log('View button clicked for course:', course);
-                            handleViewCourse(course.id);
-                          }}
+                              onClick={() => handleViewCourse(course.id)}
                             >
-                              View
+                          View & Edit
                         </Button>,
                             <Button 
                           type="link" 
@@ -378,14 +332,10 @@ const TeacherHomePage = () => {
                               <Tag color="blue">{course.category || 'General'}</Tag>
                               <Tag color="green">{course.level || 'All Levels'}</Tag>
                             </Space>
-                            <div style={{ marginTop: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div style={{ marginTop: 12 }}>
                               <span>
                                 <TeamOutlined style={{ marginRight: 4 }} />
-                                {course.enrollmentCount || 0} students
-                              </span>
-                              <span>
-                                <StarOutlined style={{ marginRight: 4, color: '#faad14' }} />
-                                {course.rating || 0}
+                                {course.enrollmentCount || 0} students enrolled
                               </span>
                             </div>
                           </div>
@@ -396,7 +346,7 @@ const TeacherHomePage = () => {
                 )}
               />
             )}
-          </Card>
+                </Card>
         </>
       )}
     </Layout>

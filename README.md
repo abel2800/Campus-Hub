@@ -11,12 +11,22 @@ Campus Hub is an advanced e-learning and social media platform designed to enhan
 - **Grade Management:** Teachers can assign grades and students can track their performance
 - **Progress Tracking:** Real-time tracking of video completion and course progress
 
+<<<<<<< HEAD
 ### 🏫 Social Media
 - **User Profiles:** Customizable profiles with avatars and biographical information
 - **Social Posts:** Students can create posts with text, photos, and videos
 - **Interactions:** Like, comment, and share functionality for all posts
 - **Friend System:** Add friends and manage connections
 - **Real-time Chat:** Private messaging between users with notification support
+=======
+### 🏫 Social Media (for Students & Teachers)
+- **User Profiles:** Customizable profiles with avatars and biographical information
+- **Social Posts:** Users can create posts with text, photos, and videos
+- **Story Sharing:** Users can share temporary stories visible for 24 hours
+- **Interactions:** Like, comment, and share functionality for all posts
+- **Friend System:** Add friends and manage connections between students and teachers
+- **Real-time Chat:** Private messaging between all platform users with notification support
+>>>>>>> bb52ff8 (full complet code no error)
 
 ### 👨‍🏫 Teacher Features
 - **Dashboard:** Analytics showing student counts, revenue, and overall engagement
@@ -24,6 +34,17 @@ Campus Hub is an advanced e-learning and social media platform designed to enhan
 - **Student Management:** View enrolled students and their progress
 - **Performance Metrics:** Track student engagement and success rates
 - **Grade Assignment:** Assign and manage student grades
+<<<<<<< HEAD
+=======
+- **Teacher Social Networking:** Connect with students through the same social features available to students
+- **View Switching:** Easily switch between teacher dashboard and student view modes
+
+## Role-Based Access
+- **Students:** Access to course enrollment, learning materials, and all social features
+- **Teachers:** Full course management capabilities plus access to the same social networking features as students
+- **Shared Features:** Both students and teachers can use profiles, social media, chat, and friend connections
+- **Dual Interface:** Teachers can access both the teaching dashboard and student experience from the same account
+>>>>>>> bb52ff8 (full complet code no error)
 
 ## Technical Architecture
 
@@ -162,4 +183,8 @@ Contributions are welcome! Follow these steps:
 This project is licensed under the MIT License.
 
 ---
+<<<<<<< HEAD
 Developed by **Abel Sirak Kebede** 🚀 
+=======
+Developed by **Abel Sirak Kebede** 🚀 
+>>>>>>> bb52ff8 (full complet code no error)

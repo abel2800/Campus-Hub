@@ -284,8 +284,8 @@ router.get('/courses/:id/students', auth, async (req, res) => {
       where: { courseId },
       include: [
         {
-          model: User,
-          as: 'student',
+        model: User,
+        as: 'student',
           attributes: ['id', 'username', 'email'] // Only use fields we're sure exist
         }
       ]

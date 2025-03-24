@@ -14,3 +14,10 @@ build/
 
 # Ignore log files
 *.log
+# Ignore the uploads folder in the backend
+backend/uploads/
+
+# Ignore the uploads folder in the frontend
+frontend/uploads/
+
+.qodo

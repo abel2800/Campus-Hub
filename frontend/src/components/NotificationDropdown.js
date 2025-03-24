@@ -1,198 +1,239 @@
 import React, { useState, useEffect } from 'react';
-import { Badge, Dropdown, List, Avatar, Typography, Button, Empty, Spin } from 'antd';
-import { BellOutlined, CheckOutlined, BookOutlined, UserAddOutlined, MessageOutlined } from '@ant-design/icons';
+import { Badge, Dropdown, List, Typography, Space, Avatar, Button, Empty, Spin } from 'antd';
+import { BellOutlined, UserOutlined, LikeOutlined, MessageOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
-import api from '../utils/axios';
-import io from 'socket.io-client';
+import moment from 'moment';
+import styled from 'styled-components';
+import axios from '../utils/axios';
+import { useSocket } from '../contexts/SocketContext';
 
-const { Text, Title } = Typography;
+const { Text } = Typography;
+
+const NotificationItem = styled(List.Item)`
+  padding: 12px 16px;
+  transition: background-color 0.3s;
+  cursor: pointer;
+  
+  &:hover {
+    background-color: #f5f5f5;
+  }
+  
+  &.unread {
+    background-color: #e6f7ff;
+  }
+`;
+
+const TimeText = styled(Text)`
+  font-size: 12px;
+  color: #8c8c8c;
+`;
+
+const NotificationIcon = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background-color: ${props => props.color || '#1890ff'};
+  color: white;
+  margin-right: 8px;
+`;
 
 const NotificationDropdown = () => {
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [socket, setSocket] = useState(null);
-  const { user } = useAuth();
-  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
-
-  useEffect(() => {
-    if (user && user.token) {
-      fetchNotifications();
-      
-      // Connect to socket.io server
-      const newSocket = io('http://localhost:5000', {
-        auth: {
-          token: user.token
-        }
-      });
-      
-      setSocket(newSocket);
-      
-      // Listen for new notifications
-      newSocket.on('notification', (notification) => {
-        setNotifications(prev => [notification, ...prev]);
-      });
-      
-      return () => {
-        newSocket.disconnect();
-      };
-    }
-  }, [user]);
+  const navigate = useNavigate();
+  const { socket } = useSocket();
 
   const fetchNotifications = async () => {
     try {
       setLoading(true);
-      const response = await api.get('/api/notifications', {
-        headers: { Authorization: `Bearer ${user.token}` }
-      });
+      const response = await axios.get('/api/notifications');
       setNotifications(response.data);
     } catch (error) {
-      console.error('Error fetching notifications:', error);
+      console.error('Failed to fetch notifications:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const markAsRead = async (notificationId) => {
-    try {
-      await api.put(`/api/notifications/${notificationId}/read`, {}, {
-        headers: { Authorization: `Bearer ${user.token}` }
+  useEffect(() => {
+    if (open) {
+      fetchNotifications();
+    }
+  }, [open]);
+
+  // Listen for real-time notifications
+  useEffect(() => {
+    if (socket) {
+      console.log('Setting up notification listener');
+      
+      // Set up the notification listener
+      socket.on('notification', (newNotification) => {
+        console.log('New notification received:', newNotification);
+        setNotifications(prev => [newNotification, ...prev]);
       });
       
-      // Update local state
-      setNotifications(notifications.map(notification => 
-        notification.id === notificationId 
-          ? { ...notification, read: true } 
-          : notification
-      ));
-    } catch (error) {
-      console.error('Error marking notification as read:', error);
+      // Clean up the listener when the component unmounts
+      return () => {
+        socket.off('notification');
+      };
     }
-  };
+  }, [socket]);
 
   const handleNotificationClick = (notification) => {
     // Mark as read
-    if (!notification.read) {
-      markAsRead(notification.id);
-    }
+    axios.put(`/api/notifications/${notification.id}/read`)
+      .catch(error => console.error('Failed to mark notification as read:', error));
     
     // Navigate based on notification type
     switch (notification.type) {
-      case 'COURSE_ENROLLMENT':
-        navigate('/my-courses');
-        break;
-      case 'FRIEND_REQUEST':
+      case 'friend_request':
+        // For friend requests, navigate to the friends page
         navigate('/friends');
         break;
-      case 'MESSAGE':
-        navigate('/chat');
+      case 'message':
+        // For messages, navigate to chat with the sender
+        if (notification.senderId) {
+          navigate(`/chat/${notification.senderId}`);
+        } else {
+          navigate('/chat');
+        }
+        break;
+      case 'post_like':
+      case 'post_comment':
+        // For post interactions, navigate to the specific post
+        if (notification.entityId) {
+          navigate(`/social-media?post=${notification.entityId}`);
+        } else {
+          navigate('/social-media');
+        }
+        break;
+      case 'course_enroll':
+        // For course enrollments, navigate to the specific course
+        if (notification.entityId) {
+          navigate(`/courses/${notification.entityId}`);
+        } else {
+          navigate('/courses');
+        }
         break;
       default:
+        navigate('/notifications');
         break;
     }
-    
-    // Close dropdown after clicking
     setOpen(false);
   };
 
-  const getNotificationIcon = (type) => {
+  const handleViewAll = () => {
+    navigate('/notifications');
+    setOpen(false);
+  };
+
+  const getIconForType = (type) => {
     switch (type) {
-      case 'COURSE_ENROLLMENT':
-        return <BookOutlined style={{ color: '#52c41a' }} />;
-      case 'FRIEND_REQUEST':
-        return <UserAddOutlined style={{ color: '#1890ff' }} />;
-      case 'MESSAGE':
-        return <MessageOutlined style={{ color: '#722ed1' }} />;
+      case 'friend_request':
+        return <UserOutlined />;
+      case 'message':
+        return <MessageOutlined />;
+      case 'post_like':
+        return <LikeOutlined />;
+      case 'post_comment':
+        return <MessageOutlined />;
+      case 'course_enroll':
+        return <UserOutlined />;
       default:
         return <BellOutlined />;
     }
   };
 
-  const unreadCount = notifications.filter(notification => !notification.read).length;
+  const getColorForType = (type) => {
+    switch (type) {
+      case 'friend_request':
+        return '#1890ff'; // Blue
+      case 'message':
+        return '#722ed1'; // Purple
+      case 'post_like':
+        return '#fa8c16'; // Orange
+      case 'post_comment':
+        return '#52c41a'; // Green
+      case 'course_enroll':
+        return '#eb2f96'; // Pink
+      default:
+        return '#1890ff'; // Default blue
+    }
+  };
+
+  const getFormattedTime = (time) => {
+    return moment(time).fromNow();
+  };
+
+  const unreadCount = notifications.filter(n => !n.read).length;
 
   const notificationMenu = (
-    <div style={{ width: 350, maxHeight: 400, overflow: 'auto', padding: '8px 0', backgroundColor: '#fff', boxShadow: '0 3px 6px rgba(0,0,0,0.2)' }}>
-      <div style={{ padding: '0 16px 8px', borderBottom: '1px solid #f0f0f0' }}>
-        <Title level={5} style={{ margin: '8px 0' }}>Notifications</Title>
+    <div style={{ width: 360, maxHeight: 500, overflow: 'auto' }}>
+      <div style={{ padding: '12px 16px', borderBottom: '1px solid #f0f0f0' }}>
+        <Text strong>Notifications</Text>
       </div>
       
       {loading ? (
-        <div style={{ padding: '20px 0', textAlign: 'center' }}>
+        <div style={{ padding: '24px', textAlign: 'center' }}>
           <Spin />
         </div>
       ) : notifications.length === 0 ? (
         <Empty 
           image={Empty.PRESENTED_IMAGE_SIMPLE} 
-          description="No notifications yet" 
-          style={{ margin: '20px 0' }}
+          description="No notifications" 
+          style={{ padding: '24px' }}
         />
       ) : (
         <List
           dataSource={notifications}
           renderItem={notification => (
-            <List.Item 
-              style={{ 
-                padding: '8px 16px', 
-                backgroundColor: notification.read ? 'transparent' : '#f0f8ff',
-                cursor: 'pointer'
-              }}
+            <NotificationItem 
+              className={notification.read ? '' : 'unread'}
               onClick={() => handleNotificationClick(notification)}
             >
-              <List.Item.Meta
-                avatar={
-                  <Avatar icon={getNotificationIcon(notification.type)} />
-                }
-                title={notification.type.replace(/_/g, ' ')}
-                description={
-                  <div>
-                    <Text style={{ fontSize: '13px' }}>{notification.content}</Text>
-                    <div style={{ fontSize: '12px', color: '#8c8c8c', marginTop: '4px' }}>
-                      {new Date(notification.createdAt).toLocaleString()}
-                    </div>
-                  </div>
-                }
-              />
-              {!notification.read && (
-                <Button 
-                  type="text" 
-                  size="small" 
-                  icon={<CheckOutlined />} 
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    markAsRead(notification.id);
-                  }}
-                />
-              )}
-            </List.Item>
+              <Space>
+                {notification.user && notification.user.avatar ? (
+                  <Avatar src={notification.user.avatar} />
+                ) : (
+                  <NotificationIcon color={getColorForType(notification.type)}>
+                    {getIconForType(notification.type)}
+                  </NotificationIcon>
+                )}
+                <div>
+                  <div>{notification.content}</div>
+                  <TimeText>{getFormattedTime(notification.createdAt)}</TimeText>
+                </div>
+              </Space>
+            </NotificationItem>
           )}
         />
       )}
       
-      {notifications.length > 0 && (
-        <div style={{ padding: '8px 16px', borderTop: '1px solid #f0f0f0', textAlign: 'center' }}>
-          <Button type="link" onClick={fetchNotifications}>
-            Refresh
-          </Button>
-        </div>
-      )}
+      <div style={{ padding: '12px 16px', borderTop: '1px solid #f0f0f0', textAlign: 'center' }}>
+        <Button type="link" onClick={handleViewAll}>
+          View all notifications
+        </Button>
+      </div>
     </div>
   );
 
   return (
-    <Dropdown 
+    <Dropdown
+      overlay={notificationMenu}
+      trigger={['click']}
       open={open}
       onOpenChange={setOpen}
-      dropdownRender={() => notificationMenu}
-      trigger={['click']} 
       placement="bottomRight"
-      arrow
     >
-      <Badge count={unreadCount} overflowCount={99} onClick={() => setOpen(!open)}>
+      <Badge count={unreadCount} size="small">
         <Button 
           type="text" 
           icon={<BellOutlined style={{ fontSize: '20px' }} />} 
-          style={{ background: 'transparent' }}
+          style={{ padding: '4px 8px' }} 
         />
       </Badge>
     </Dropdown>

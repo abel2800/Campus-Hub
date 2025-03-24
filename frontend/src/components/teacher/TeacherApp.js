@@ -5,6 +5,10 @@ import CourseCreation from './CourseCreation';
 import CourseEdit from './CourseEdit';
 import CourseView from './CourseView';
 import CourseVideoUpload from './CourseVideoUpload';
+import SocialMediaPage from '../SocialMediaPage';
+import Friends from '../Friends';
+import Chat from '../ChatPage';
+import ProfilePage from '../ProfilePage';
 import { useAuth } from '../../contexts/AuthContext';
 import AppLayout from '../AppLayout';
 import { Spin, Alert } from 'antd';
@@ -88,6 +92,28 @@ const TeacherApp = () => {
     if (path === '/teacher/create-course') {
       console.log('Rendering CourseCreation');
       return <CourseCreation />;
+    }
+    
+    // Social media and communication routes
+    if (path === '/social-media') {
+      return <SocialMediaPage />;
+    }
+    
+    if (path === '/friends') {
+      return <Friends />;
+    }
+    
+    if (path.startsWith('/chat')) {
+      const chatUserIdMatch = path.match(/^\/chat\/(\d+)$/);
+      if (chatUserIdMatch) {
+        const chatUserId = chatUserIdMatch[1];
+        return <Chat key={chatUserId} userId={chatUserId} />;
+      }
+      return <Chat />;
+    }
+    
+    if (path === '/profile') {
+      return <ProfilePage />;
     }
     
     // Course specific routes with ID

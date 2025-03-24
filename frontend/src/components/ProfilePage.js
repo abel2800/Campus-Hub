@@ -67,6 +67,11 @@ const ProfilePage = () => {
   const [isTeacher, setIsTeacher] = useState(false);
 
   useEffect(() => {
+    console.log('ProfilePage mounted - User:', user?.username, 'Role:', user?.role);
+    
+    // Check if the user is a teacher
+    setIsTeacher(user && user.role === 'teacher');
+    
     if (!user) {
       navigate('/login');
     } else {
@@ -84,7 +89,7 @@ const ProfilePage = () => {
         fetchUserStats();
       }
     }
-  }, [user, navigate, userId]);
+  }, [userId, user]);
 
   const loadOtherUserProfile = async (userId) => {
     try {
@@ -121,10 +126,17 @@ const ProfilePage = () => {
       }
       
       try {
-        // If viewing own profile, get enrolled courses
+        // If viewing own profile, get appropriate courses based on role
         if (isOwnProfile) {
-          const coursesRes = await api.get('/api/courses/user/enrolled');
-          setCourses(coursesRes.data || []);
+          if (isTeacher) {
+            // For teachers, fetch courses they've created
+            const coursesRes = await api.get('/api/courses/teacher');
+            setCourses(coursesRes.data || []);
+          } else {
+            // For students, get enrolled courses
+            const coursesRes = await api.get('/api/courses/user/enrolled');
+            setCourses(coursesRes.data || []);
+          }
         } else {
           // For other users, this might be different or not available
           setCourses([]);
@@ -161,13 +173,34 @@ const ProfilePage = () => {
       let coursesCount = 0;
       let friendsCount = 0;
       
-      // Fetch enrolled courses count
+      // Fetch appropriate courses count based on role
       if (isOwnProfile) {
         try {
-          const coursesResponse = await api.get('/api/courses/user/enrolled');
-          coursesCount = Array.isArray(coursesResponse.data) ? coursesResponse.data.length : 0;
+          if (isTeacher) {
+            // For teachers, count courses they've created
+            try {
+              const coursesResponse = await api.get('/api/courses/teacher');
+              const coursesData = coursesResponse.data || [];
+              
+              // Handle different data types but prioritize array length
+              if (Array.isArray(coursesData)) {
+                coursesCount = coursesData.length;
+              } else if (typeof coursesData === 'object') {
+                coursesCount = 0; // Default to 0 for object
+              } else if (typeof coursesData === 'number') {
+                coursesCount = coursesData;
+              }
+            } catch (err) {
+              coursesCount = 0;
+            }
+          } else {
+            // For students, count enrolled courses
+            const coursesResponse = await api.get('/api/courses/user/enrolled');
+            coursesCount = Array.isArray(coursesResponse.data) ? coursesResponse.data.length : 0;
+          }
         } catch (err) {
-          console.error('Error fetching courses count:', err);
+          // Silent error handling
+          coursesCount = 0;
         }
       }
       
@@ -176,7 +209,8 @@ const ProfilePage = () => {
         const friendsResponse = await api.get('/api/friends/list');
         friendsCount = Array.isArray(friendsResponse.data) ? friendsResponse.data.length : 0;
       } catch (err) {
-        console.error('Error fetching friends count:', err);
+        // Silent error handling
+        friendsCount = 0;
       }
       
       // Fetch posts count
@@ -184,7 +218,8 @@ const ProfilePage = () => {
         const postsResponse = await api.get(`/api/posts/user/${userId}`);
         postsCount = Array.isArray(postsResponse.data) ? postsResponse.data.length : 0;
       } catch (err) {
-        console.error('Error fetching posts count:', err);
+        // Silent error handling
+        postsCount = 0;
       }
       
       setStats({
@@ -192,11 +227,8 @@ const ProfilePage = () => {
         friends: friendsCount,
         posts: postsCount
       });
-      
-      console.log('User stats:', { courses: coursesCount, friends: friendsCount, posts: postsCount });
     } catch (error) {
-      console.error('Error fetching user stats:', error);
-      // Don't show an error message for stats, just log it
+      // Silent error handling
     } finally {
       setStatsLoading(false);
     }
@@ -212,25 +244,36 @@ const ProfilePage = () => {
     
     try {
       setUploadLoading(true);
+      
+      // Check if file is an image type before uploading
+      const isImage = file.type.startsWith('image/');
+      if (!isImage) {
+        // Silent failure
+        setUploadLoading(false);
+        return false;
+      }
+      
       const formData = new FormData();
       formData.append('avatar', file);
-
+      
       const response = await api.post('/api/users/avatar', formData, {
         headers: {
-          'Content-Type': 'multipart/form-data',
-          Authorization: `Bearer ${user.token}`
+          'Content-Type': 'multipart/form-data'
         }
       });
       
       // Update user in context with new avatar URL
-      const avatarUrl = response.data.avatarUrl;
+      const avatarUrl = response.data.avatarUrl || response.data.avatar;
       updateUser({ ...user, avatar: avatarUrl });
       
-      message.success('Avatar updated successfully');
+      // Force a reload of the page to ensure the avatar is displayed correctly
+      setTimeout(() => {
+        window.location.reload();
+      }, 1000);
+      
       return true;
     } catch (error) {
-      console.error('Error uploading avatar:', error);
-      message.error('Failed to upload avatar');
+      // Silent failure
       return false;
     } finally {
       setUploadLoading(false);
@@ -284,6 +327,24 @@ const ProfilePage = () => {
     
     // Default thumbnail for courses
     return `${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/uploads/courses/thumbnails/default-thumbnail.jpg`;
+  };
+
+  // Update the Statistic component to handle different data types
+  const renderStatValue = (value) => {
+    // Check for simple number values first
+    if (typeof value === 'number') return value;
+    
+    // Handle null/undefined cases
+    if (value === undefined || value === null) return 0;
+    
+    // Handle array cases (most common for courses)
+    if (Array.isArray(value)) return value.length;
+    
+    // For non-array objects, just return 0 to avoid issues
+    if (typeof value === 'object') return 0;
+    
+    // Default fallback
+    return 0;
   };
 
   if (!displayedUser) {
@@ -445,8 +506,8 @@ const ProfilePage = () => {
               <Col span={8}>
                 <Card bordered={false}>
                   <Statistic 
-                    title="Courses" 
-                    value={statsLoading ? <Spin size="small" /> : stats.courses} 
+                    title={isTeacher ? "Courses Created" : "Courses Enrolled"} 
+                    value={statsLoading ? <Spin size="small" /> : renderStatValue(stats.courses)} 
                     prefix={<BookOutlined />}
                   />
                 </Card>
@@ -522,71 +583,57 @@ const ProfilePage = () => {
           )}
           </TabPane>
           
-          {/* Only show My Courses tab for non-teacher users */}
-          {(!isTeacher || !isTeacher()) && (
-            <TabPane 
+          {/* Course tab for all users */}
+          <TabPane 
             tab={
               <span>
                 <BookOutlined />
-                My Courses <Badge count={courses.length} style={{ backgroundColor: '#1890ff' }} />
+                {isTeacher ? 'Courses Created' : 'My Courses'} <Badge count={courses.length} style={{ backgroundColor: '#1890ff' }} />
               </span>
             } 
-              key="courses"
-            >
+            key="courses"
+          >
             {loading ? (
               <div style={{ textAlign: 'center', padding: '20px 0' }}>
                 <Spin />
               </div>
             ) : courses.length === 0 ? (
               <Empty 
-                description={isOwnProfile ? "No courses enrolled" : "No courses to display"}
+                description={isOwnProfile ? 
+                  (isTeacher ? "You haven't created any courses yet" : "You're not enrolled in any courses") : 
+                  "No courses to display"}
                 image={Empty.PRESENTED_IMAGE_SIMPLE}
               >
                 {isOwnProfile && (
                   <Button 
                     type="primary" 
-                    onClick={() => navigate('/home')}
+                    onClick={() => navigate(isTeacher ? '/teacher/create-course' : '/courses')}
                     style={{ marginTop: '16px' }}
                   >
-                    Browse Courses
+                    {isTeacher ? 'Create New Course' : 'Browse Courses'}
                   </Button>
                 )}
               </Empty>
             ) : (
               <List
-                grid={{ gutter: 16, xs: 1, sm: 2, md: 3, lg: 4, xl: 5, xxl: 6 }}
+                grid={{ gutter: 16, xs: 1, sm: 2, md: 3, lg: 3, xl: 4, xxl: 4 }}
                 dataSource={courses}
                 renderItem={course => (
                   <List.Item>
                     <Card
                       hoverable
                       cover={
-                        <Image
+                        <img
                           alt={course.title}
-                          src={getImageUrl(course.imageUrl || course.thumbnail)}
-                          fallback="https://via.placeholder.com/300x200?text=Course+Image"
+                          src={getImageUrl(course.imageUrl)}
                           style={{ height: 160, objectFit: 'cover' }}
                         />
                       }
-                      size="small"
-                      actions={[
-                        <Button 
-                          type="link" 
-                          key="view" 
-                          size="small"
-                          onClick={() => navigate(`/courses/${course.id}`)}
-                        >
-                          View
-                        </Button>
-                      ]}
+                      onClick={() => navigate(isTeacher ? `/teacher/courses/${course.id}` : `/courses/${course.id}`)}
                     >
-                      <Card.Meta
+                      <Card.Meta 
                         title={course.title}
-                        description={
-                          <Paragraph ellipsis={{ rows: 1 }}>
-                            {course.description}
-                          </Paragraph>
-                        }
+                        description={course.description ? (course.description.length > 60 ? course.description.substring(0, 60) + '...' : course.description) : 'No description'}
                       />
                     </Card>
                   </List.Item>
@@ -594,72 +641,71 @@ const ProfilePage = () => {
               />
             )}
           </TabPane>
-        )}
-        
-        <TabPane 
-          tab={
-            <span>
-              <TeamOutlined />
-              Friends <Badge count={friends.length} style={{ backgroundColor: '#1890ff' }} />
-            </span>
-          } 
-          key="friends"
-        >
-          {loading ? (
-            <div style={{ textAlign: 'center', padding: '20px 0' }}>
-              <Spin />
-            </div>
-          ) : friends.length === 0 ? (
-            <Empty 
-              description="No friends added yet" 
-              image={Empty.PRESENTED_IMAGE_SIMPLE}
-            >
-              <Button 
-                type="primary" 
-                onClick={() => navigate('/friends')}
-                style={{ marginTop: '16px' }}
+          
+          <TabPane 
+            tab={
+              <span>
+                <TeamOutlined />
+                Friends <Badge count={friends.length} style={{ backgroundColor: '#1890ff' }} />
+              </span>
+            } 
+            key="friends"
+          >
+            {loading ? (
+              <div style={{ textAlign: 'center', padding: '20px 0' }}>
+                <Spin />
+              </div>
+            ) : friends.length === 0 ? (
+              <Empty 
+                description="No friends added yet" 
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
               >
-                Find Friends
-              </Button>
-            </Empty>
-          ) : (
-            <List
-              grid={{ gutter: 16, xs: 1, sm: 2, md: 3, lg: 4, xl: 5, xxl: 6 }}
-              dataSource={friends}
-              renderItem={friendship => {
-                const friend = friendship.friend;
-                return (
-                  <List.Item>
-                    <Card size="small" hoverable>
-                      <Card.Meta
-                        avatar={
-                          <Avatar 
-                            src={friend.avatar || friend.avatarUrl} 
-                            icon={<UserOutlined />} 
-                            size={64}
-                          />
-                        }
-                        title={friend.username}
-                        description={friend.department || 'No department'}
-                      />
-                      <div style={{ marginTop: 12, display: 'flex', justifyContent: 'space-between' }}>
-                        <Link to={`/profile/${friend.id}`}>
-                          <Button size="small" type="link">View Profile</Button>
-                        </Link>
-                        <Button 
-                          size="small" 
-                          icon={<MessageOutlined />}
-                          onClick={() => navigate(`/chat/${friend.id}`)}
-                        >
-                          Chat
-                        </Button>
-                      </div>
-                    </Card>
-                  </List.Item>
-                );
-              }}
-            />
-          )}
+                <Button 
+                  type="primary" 
+                  onClick={() => navigate('/friends')}
+                  style={{ marginTop: '16px' }}
+                >
+                  Find Friends
+                </Button>
+              </Empty>
+            ) : (
+              <List
+                grid={{ gutter: 16, xs: 1, sm: 2, md: 3, lg: 4, xl: 5, xxl: 6 }}
+                dataSource={friends}
+                renderItem={friendship => {
+                  const friend = friendship.friend;
+                  return (
+                    <List.Item>
+                      <Card size="small" hoverable>
+                        <Card.Meta
+                          avatar={
+                            <Avatar 
+                              src={friend.avatar || friend.avatarUrl} 
+                              icon={<UserOutlined />} 
+                              size={64}
+                            />
+                          }
+                          title={friend.username}
+                          description={friend.department || 'No department'}
+                        />
+                        <div style={{ marginTop: 12, display: 'flex', justifyContent: 'space-between' }}>
+                          <Link to={`/profile/${friend.id}`}>
+                            <Button size="small" type="link">View Profile</Button>
+                          </Link>
+                          <Button 
+                            size="small" 
+                            icon={<MessageOutlined />}
+                            onClick={() => navigate(`/chat/${friend.id}`)}
+                          >
+                            Chat
+                          </Button>
+                        </div>
+                      </Card>
+                    </List.Item>
+                  );
+                }}
+              />
+            )}
           </TabPane>
         </Tabs>
 

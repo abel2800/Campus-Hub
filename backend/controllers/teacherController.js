@@ -356,7 +356,7 @@ const teacherController = {
       // Get all course IDs by this teacher
       const courses = await Course.findAll({
         where: { instructorId: req.teacher.id },
-        attributes: ['id']
+        attributes: ['id', 'rating']
       });
       
       const courseIds = courses.map(c => c.id);
@@ -366,20 +366,17 @@ const teacherController = {
         where: { courseId: { [sequelize.Op.in]: courseIds } }
       }) : 0;
       
-      // Calculate total watch time across all courses
-      const courseVideos = await CourseVideo.findAll({
-        where: { courseId: { [sequelize.Op.in]: courseIds } },
-        attributes: ['duration']
-      });
-      
-      const totalWatchTime = courseVideos.reduce((total, video) => {
-        return total + (video.duration || 0);
-      }, 0);
+      // Calculate average rating across all courses
+      let averageRating = 0;
+      if (courses.length > 0) {
+        const totalRating = courses.reduce((sum, course) => sum + (course.rating || 0), 0);
+        averageRating = totalRating / courses.length;
+      }
       
       res.json({
         totalCourses,
         totalStudents,
-        totalWatchTime
+        averageRating: parseFloat(averageRating.toFixed(1))
       });
     } catch (error) {
       console.error('Error fetching teacher stats:', error);

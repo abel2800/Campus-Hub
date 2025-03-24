@@ -1,11 +1,14 @@
 const { Message, User } = require('../models');
 const { Op } = require('sequelize');
+const sequelize = require('sequelize');
 
 const messageController = {
   getMessages: async (req, res) => {
     try {
       const userId = req.user.id;
       const { participantId } = req.params;
+
+      console.log(`Fetching messages between users ${userId} and ${participantId}`);
 
       const messages = await Message.findAll({
         where: {
@@ -14,18 +17,26 @@ const messageController = {
             { sender_id: participantId, receiver_id: userId }
           ]
         },
-        include: [{
-          model: User,
-          as: 'sender',
-          attributes: ['id', 'username', 'department']
-        }],
+        include: [
+          {
+            model: User,
+            as: 'sender',
+            attributes: ['id', 'username', 'avatar', 'department']
+          },
+          {
+            model: User,
+            as: 'receiver',
+            attributes: ['id', 'username', 'avatar', 'department']
+          }
+        ],
         order: [['created_at', 'ASC']]
       });
 
+      console.log(`Found ${messages.length} messages`);
       res.json(messages);
     } catch (error) {
       console.error('Get messages error:', error);
-      res.status(500).json({ message: 'Server error' });
+      res.status(500).json({ message: 'Server error', error: error.message });
     }
   },
 
@@ -33,6 +44,8 @@ const messageController = {
     try {
       const userId = req.user.id;
       const { participantId } = req.body;
+
+      console.log(`Creating chat between users ${userId} and ${participantId}`);
 
       // Create initial message
       const message = await Message.create({
@@ -43,39 +56,93 @@ const messageController = {
 
       const messageWithUser = await Message.findOne({
         where: { id: message.id },
-        include: [{
-          model: User,
-          as: 'sender',
-          attributes: ['id', 'username', 'department']
-        }]
+        include: [
+          {
+            model: User,
+            as: 'sender',
+            attributes: ['id', 'username', 'avatar', 'department']
+          },
+          {
+            model: User,
+            as: 'receiver',
+            attributes: ['id', 'username', 'avatar', 'department']
+          }
+        ]
       });
 
+      console.log('Chat created successfully');
       res.json(messageWithUser);
     } catch (error) {
       console.error('Create chat error:', error);
-      res.status(500).json({ message: 'Server error' });
+      res.status(500).json({ message: 'Server error', error: error.message });
     }
   },
 
   sendMessage: async (req, res) => {
     try {
       const userId = req.user.id;
+      console.log('Send message request body:', req.body);
+      console.log('Sender user ID:', userId);
+      
+      // Extract participant ID and content from request body
       const { participantId, content } = req.body;
+      
+      console.log('Receiver ID:', participantId);
+      console.log('Message content:', content);
+      
+      // Validate required parameters
+      if (!participantId) {
+        console.error('Missing participantId in request');
+        return res.status(400).json({ message: 'Recipient ID is required' });
+      }
+      
+      if (!content) {
+        console.error('Missing content in request');
+        return res.status(400).json({ message: 'Message content is required' });
+      }
 
+      // Get sender info for notification
+      const sender = await User.findByPk(userId, {
+        attributes: ['id', 'username', 'avatar']
+      });
+
+      if (!sender) {
+        return res.status(404).json({ message: 'Sender not found' });
+      }
+
+      // Create the message with the correct parameter names
       const message = await Message.create({
         sender_id: userId,
         receiver_id: participantId,
-        content
+        content: content
       });
+
+      console.log('Message created successfully:', message.id);
 
       const messageWithUser = await Message.findOne({
         where: { id: message.id },
-        include: [{
-          model: User,
-          as: 'sender',
-          attributes: ['id', 'username', 'department']
-        }]
+        include: [
+          {
+            model: User,
+            as: 'sender',
+            attributes: ['id', 'username', 'avatar', 'department']
+          },
+          {
+            model: User,
+            as: 'receiver',
+            attributes: ['id', 'username', 'avatar', 'department']
+          }
+        ]
       });
+
+      // Create notification for the message recipient
+      const notificationController = require('./notificationController');
+      await notificationController.createMessageNotification(
+        participantId,
+        userId,
+        sender.username,
+        message.id
+      );
 
       if (req.app.io) {
         req.app.io.to(`user_${participantId}`).emit('new_message', messageWithUser);
@@ -84,52 +151,102 @@ const messageController = {
       res.json(messageWithUser);
     } catch (error) {
       console.error('Send message error:', error);
-      res.status(500).json({ message: 'Server error' });
+      res.status(500).json({ message: 'Server error', error: error.message });
     }
   },
 
   getRecentChats: async (req, res) => {
     try {
       const userId = req.user.id;
+      console.log('Fetching recent chats for user:', userId);
 
-      const messages = await Message.findAll({
+      // First, get the latest message for each conversation
+      const latestMessages = await Message.findAll({
+        attributes: [
+          [sequelize.fn('MAX', sequelize.col('id')), 'maxId'],
+          [sequelize.fn('MAX', sequelize.col('created_at')), 'latest_date'],
+          [
+            sequelize.literal(`
+              CASE 
+                WHEN sender_id = ${userId} THEN receiver_id 
+                ELSE sender_id 
+              END
+            `),
+            'other_user_id'
+          ]
+        ],
         where: {
           [Op.or]: [
             { sender_id: userId },
             { receiver_id: userId }
           ]
         },
+        group: [
+          [
+            sequelize.literal(`
+              CASE 
+                WHEN sender_id = ${userId} THEN receiver_id 
+                ELSE sender_id 
+              END
+            `)
+          ]
+        ],
+        raw: true
+      });
+
+      console.log(`Found ${latestMessages.length} conversations`);
+
+      if (latestMessages.length === 0) {
+        return res.json([]);
+      }
+
+      // Get all the message IDs
+      const messageIds = latestMessages.map(msg => msg.maxId);
+
+      // Fetch the actual messages with user details
+      const messages = await Message.findAll({
+        where: {
+          id: messageIds
+        },
         include: [
           {
             model: User,
             as: 'sender',
-            attributes: ['id', 'username', 'department']
+            attributes: ['id', 'username', 'avatar', 'department']
           },
           {
             model: User,
             as: 'receiver',
-            attributes: ['id', 'username', 'department']
+            attributes: ['id', 'username', 'avatar', 'department']
           }
         ],
         order: [['created_at', 'DESC']]
       });
 
-      // Group messages by conversation
-      const chatMap = new Map();
-      messages.forEach(message => {
-        const otherUser = message.sender_id === userId ? message.receiver : message.sender;
-        if (!chatMap.has(otherUser.id)) {
-          chatMap.set(otherUser.id, {
-            participant: otherUser,
-            lastMessage: message
-          });
-        }
+      // Transform messages to include participant info
+      const enrichedMessages = messages.map(message => {
+        const messageData = message.toJSON();
+        
+        // Determine which user is the conversation participant (not the current user)
+        const isUserSender = message.sender_id === userId;
+        const participant = isUserSender ? message.receiver : message.sender;
+        
+        return {
+          ...messageData,
+          participant: participant ? {
+            id: participant.id,
+            username: participant.username,
+            avatar: participant.avatar,
+            department: participant.department
+          } : null
+        };
       });
 
-      res.json(Array.from(chatMap.values()));
+      console.log(`Returning ${enrichedMessages.length} enriched conversations`);
+      res.json(enrichedMessages);
     } catch (error) {
       console.error('Get recent chats error:', error);
-      res.status(500).json({ message: 'Server error' });
+      res.status(500).json({ message: 'Server error', error: error.message });
     }
   }
 };

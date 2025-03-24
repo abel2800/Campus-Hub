@@ -22,6 +22,7 @@ import AppLayout from './components/AppLayout';
 import TeacherApp from './components/teacher/TeacherApp';
 import TeacherRegistration from './pages/TeacherRegistration';
 import LoginPage from './components/LoginPage';
+import NotificationsPage from './pages/NotificationsPage';
 import { Spin } from 'antd';
 
 // App with Router
@@ -57,7 +58,18 @@ function AppRoutes() {
   
   // Check if the path is a public route
   const isPublicRoute = ['/', '/login', '/create-account', '/teacher-registration'].includes(location.pathname);
-  const isTeacherRoute = location.pathname.startsWith('/teacher');
+  
+  // Check if it's a teacher-specific route (but not shared functionality like social media)
+  const isTeacherRoute = location.pathname.startsWith('/teacher') && 
+    !location.pathname.includes('/social-media') && 
+    !location.pathname.includes('/friends') && 
+    !location.pathname.includes('/chat') && 
+    !location.pathname.includes('/profile');
+  
+  // Check if it's a shared functionality route
+  const isSharedRoute = ['/social-media', '/friends', '/chat', '/profile'].some(path => 
+    location.pathname.startsWith(path)
+  );
   
   // Show loading indicator while checking auth state
   if (loading) {
@@ -89,7 +101,7 @@ function AppRoutes() {
     return isTeacher() ? <Navigate to="/teacher" replace /> : <Navigate to="/home" replace />;
   }
   
-  // Handle teacher routes
+  // Handle teacher-specific routes
   if (isTeacherRoute) {
     console.log("Teacher route detected:", location.pathname);
     
@@ -112,7 +124,29 @@ function AppRoutes() {
     // Return TeacherApp component
     return <TeacherApp />;
   }
-
+  
+  // Handle shared functionality routes for authenticated users
+  if (isSharedRoute) {
+    if (!isAuthenticated) {
+      console.log("User not authenticated, redirecting to login");
+      return <Navigate to="/login" replace />;
+    }
+    
+    // Return the appropriate component based on the route
+    return (
+      <AppLayout>
+        <Routes>
+          <Route path="/social-media" element={<SocialMediaPage />} />
+          <Route path="/friends" element={<Friends />} />
+          <Route path="/chat" element={<Chat />} />
+          <Route path="/chat/:userId" element={<Chat />} />
+          <Route path="/profile" element={<Profile />} />
+          <Route path="/notifications" element={<NotificationsPage />} />
+        </Routes>
+      </AppLayout>
+    );
+  }
+  
   // Show public routes or private routes based on authentication
   return (
     <>
@@ -139,6 +173,7 @@ function AppRoutes() {
                 <Route path="/friends" element={<Friends />} />
                 <Route path="/profile" element={<Profile />} />
                 <Route path="/settings" element={<Settings />} />
+                <Route path="/notifications" element={<NotificationsPage />} />
                 <Route path="/courses" element={<Courses />} />
                 <Route path="/my-courses" element={isTeacher() ? <Navigate to="/home" replace /> : <MyCourses />} />
                 <Route path="/courses/:courseId" element={<CourseDetailPage />} />

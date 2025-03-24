@@ -334,7 +334,14 @@ const UserProfile = () => {
   };
 
   const navigateToUserProfile = (username) => {
-    navigate(`/profile/${username}`);
+    if (username === currentUser?.username) {
+      // Navigate to own profile
+      navigate(`/profile`);
+    } else {
+      // Navigate to other user's profile
+      navigate(`/profile/${username}`);
+    }
+    
     // Close any open modals
     setShowFollowers(false);
     setShowFollowing(false);
