@@ -30,6 +30,10 @@ User.init({
     type: DataTypes.STRING,
     allowNull: true
   },
+  bio: {
+    type: DataTypes.TEXT,
+    allowNull: true
+  },
   avatar: {
     type: DataTypes.STRING,
     allowNull: true,
@@ -38,6 +42,34 @@ User.init({
   avatarUrl: {
     type: DataTypes.STRING,
     allowNull: true
+  },
+  notificationSettings: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+    defaultValue: JSON.stringify({
+      emailNotifications: 'all',
+      newMessageNotification: true,
+      friendRequestNotification: true,
+      postLikeNotification: true,
+      courseNotification: true
+    }),
+    get() {
+      const rawValue = this.getDataValue('notificationSettings');
+      return rawValue ? JSON.parse(rawValue) : null;
+    }
+  },
+  privacySettings: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+    defaultValue: JSON.stringify({
+      profileVisibility: 'friends',
+      searchable: true,
+      showCourses: true
+    }),
+    get() {
+      const rawValue = this.getDataValue('privacySettings');
+      return rawValue ? JSON.parse(rawValue) : null;
+    }
   }
 }, {
   sequelize,
@@ -45,5 +77,12 @@ User.init({
   tableName: 'Users',
   timestamps: true
 });
+
+// Add method to compare passwords
+User.prototype.comparePassword = async function(candidatePassword) {
+  // In a real app, you would use bcrypt.compare here
+  // For simplicity, we'll just compare directly (not secure for production!)
+  return this.password === candidatePassword;
+};
 
 module.exports = User;

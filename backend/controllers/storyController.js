@@ -34,36 +34,33 @@ const upload = multer({
   }
 });
 
-// Get stories from friends
-const getFriendsStories = async (req, res) => {
+// Get all stories from friends and user's own stories
+const getStories = async (req, res) => {
   try {
     const userId = req.user.id;
-    console.log('Getting stories for user:', userId);
     
-    // Get friend IDs
-    const friends = await Friend.findAll({
-      where: {
-        [Op.or]: [
-          { userId: userId },
-          { friendId: userId }
-        ]
-      }
+    // Get current user's friends + the user's own ID
+    const friendQuery = `
+      SELECT "friendId" as id FROM "Friends" WHERE "userId" = :userId
+      UNION
+      SELECT "userId" as id FROM "Friends" WHERE "friendId" = :userId
+      UNION
+      SELECT :userId as id
+    `;
+    
+    const friendIds = await Story.sequelize.query(friendQuery, {
+      replacements: { userId },
+      type: Story.sequelize.QueryTypes.SELECT,
+      raw: true
     });
     
-    const friendIds = friends.map(friend => 
-      friend.userId === userId ? friend.friendId : friend.userId
-    );
+    const userIds = friendIds.map(friend => friend.id);
     
-    // Add current user to see their own stories
-    friendIds.push(userId);
-    
-    console.log('Getting stories for user and friends:', friendIds);
-    
-    // Get stories from friends that haven't expired
+    // Get all stories from these users that haven't expired
     const stories = await Story.findAll({
       where: {
         userId: {
-          [Op.in]: friendIds
+          [Op.in]: userIds
         },
         expiresAt: {
           [Op.gt]: new Date()
@@ -79,11 +76,10 @@ const getFriendsStories = async (req, res) => {
       order: [['createdAt', 'DESC']]
     });
     
-    console.log('Found stories:', stories.length);
     res.json(stories);
   } catch (error) {
-    console.error('Get friends stories error:', error);
-    res.status(500).json({ message: 'Failed to fetch stories', error: error.message });
+    console.error('Error fetching stories:', error);
+    res.status(500).json({ message: 'Error fetching stories', error: error.message });
   }
 };
 
@@ -91,35 +87,27 @@ const getFriendsStories = async (req, res) => {
 const createStory = async (req, res) => {
   try {
     const userId = req.user.id;
-    const { type = 'image' } = req.body;
+    const { mediaUrl, mediaType = 'image', caption } = req.body;
     
-    console.log('Creating story for user:', userId);
-    console.log('Story type:', type);
-    console.log('File:', req.file);
-    
-    // Handle file upload
-    if (!req.file) {
-      return res.status(400).json({ message: 'Media file is required' });
+    // Validate required fields
+    if (!mediaUrl) {
+      return res.status(400).json({ message: 'Media URL is required' });
     }
     
-    const mediaUrl = `/uploads/stories/${req.file.filename}`;
-    console.log('Media URL:', mediaUrl);
-    
-    // Calculate expiration (24 hours from now)
+    // Create story with expiration 24 hours from now
     const expiresAt = new Date();
     expiresAt.setHours(expiresAt.getHours() + 24);
     
     const story = await Story.create({
       userId,
       mediaUrl,
-      type,
+      mediaType,
+      caption,
       expiresAt
     });
     
-    console.log('Story created:', story.id);
-    
-    // Return the story with user data
-    const storyWithUser = await Story.findByPk(story.id, {
+    // Get the created story with user information
+    const createdStory = await Story.findByPk(story.id, {
       include: [
         {
           model: User,
@@ -129,60 +117,18 @@ const createStory = async (req, res) => {
       ]
     });
     
-    res.status(201).json(storyWithUser);
+    res.status(201).json(createdStory);
   } catch (error) {
-    console.error('Create story error:', error);
-    res.status(500).json({ message: 'Failed to create story', error: error.message });
-  }
-};
-
-// Get a specific story
-const getStory = async (req, res) => {
-  try {
-    const { storyId } = req.params;
-    
-    const story = await Story.findByPk(storyId, {
-      include: [
-        {
-          model: User,
-          as: 'user',
-          attributes: ['id', 'username', 'avatar']
-        }
-      ]
-    });
-    
-    if (!story) {
-      return res.status(404).json({ message: 'Story not found' });
-    }
-    
-    res.json(story);
-  } catch (error) {
-    console.error('Get story error:', error);
-    res.status(500).json({ message: 'Failed to fetch story' });
-  }
-};
-
-// Like a story
-const likeStory = async (req, res) => {
-  try {
-    const { storyId } = req.params;
-    const userId = req.user.id;
-    
-    // Update the story to indicate like (this is simplified - normally would have a StoryLikes table)
-    // For this example we're just returning success
-    
-    res.json({ success: true, message: 'Story liked successfully' });
-  } catch (error) {
-    console.error('Like story error:', error);
-    res.status(500).json({ message: 'Failed to like story' });
+    console.error('Error creating story:', error);
+    res.status(500).json({ message: 'Error creating story', error: error.message });
   }
 };
 
 // Delete a story
 const deleteStory = async (req, res) => {
   try {
-    const { storyId } = req.params;
     const userId = req.user.id;
+    const storyId = req.params.id;
     
     const story = await Story.findByPk(storyId);
     
@@ -190,7 +136,7 @@ const deleteStory = async (req, res) => {
       return res.status(404).json({ message: 'Story not found' });
     }
     
-    // Check if the user owns the story
+    // Check if user owns the story
     if (story.userId !== userId) {
       return res.status(403).json({ message: 'Not authorized to delete this story' });
     }
@@ -199,16 +145,37 @@ const deleteStory = async (req, res) => {
     
     res.json({ message: 'Story deleted successfully' });
   } catch (error) {
-    console.error('Delete story error:', error);
-    res.status(500).json({ message: 'Failed to delete story' });
+    console.error('Error deleting story:', error);
+    res.status(500).json({ message: 'Error deleting story', error: error.message });
+  }
+};
+
+// Like a story
+const likeStory = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const storyId = req.params.id;
+    
+    const story = await Story.findByPk(storyId);
+    
+    if (!story) {
+      return res.status(404).json({ message: 'Story not found' });
+    }
+    
+    // Increment likes
+    story.likes += 1;
+    await story.save();
+    
+    res.json({ message: 'Story liked successfully', likes: story.likes });
+  } catch (error) {
+    console.error('Error liking story:', error);
+    res.status(500).json({ message: 'Error liking story', error: error.message });
   }
 };
 
 module.exports = {
-  getFriendsStories,
+  getStories,
   createStory,
-  getStory,
-  likeStory,
   deleteStory,
-  upload
+  likeStory
 }; 

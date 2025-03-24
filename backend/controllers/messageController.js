@@ -248,6 +248,53 @@ const messageController = {
       console.error('Get recent chats error:', error);
       res.status(500).json({ message: 'Server error', error: error.message });
     }
+  },
+
+  deleteChat: async (req, res) => {
+    try {
+      const userId = req.user.id;
+      const { chatId } = req.params;
+      
+      console.log(`Deleting chat with ID ${chatId} for user ${userId}`);
+      
+      // Find the chat first to determine the participants
+      const chat = await Message.findOne({
+        where: { id: chatId },
+        attributes: ['id', 'sender_id', 'receiver_id']
+      });
+      
+      if (!chat) {
+        return res.status(404).json({ message: 'Chat not found' });
+      }
+      
+      // Verify that the requesting user is a participant in the chat
+      if (chat.sender_id !== userId && chat.receiver_id !== userId) {
+        return res.status(403).json({ message: 'Unauthorized to delete this chat' });
+      }
+      
+      // Get the other participant's ID
+      const otherParticipantId = chat.sender_id === userId ? chat.receiver_id : chat.sender_id;
+      
+      // Delete all messages between these two users
+      const deletedCount = await Message.destroy({
+        where: {
+          [Op.or]: [
+            { sender_id: userId, receiver_id: otherParticipantId },
+            { sender_id: otherParticipantId, receiver_id: userId }
+          ]
+        }
+      });
+      
+      console.log(`Deleted ${deletedCount} messages between users ${userId} and ${otherParticipantId}`);
+      
+      res.json({ 
+        message: 'Chat deleted successfully', 
+        deletedCount
+      });
+    } catch (error) {
+      console.error('Delete chat error:', error);
+      res.status(500).json({ message: 'Server error', error: error.message });
+    }
   }
 };
 

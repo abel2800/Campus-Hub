@@ -8,7 +8,8 @@ console.log('Controller methods:', {
   getRecentChats: typeof messageController.getRecentChats,
   getMessages: typeof messageController.getMessages,
   createChat: typeof messageController.createChat,
-  sendMessage: typeof messageController.sendMessage
+  sendMessage: typeof messageController.sendMessage,
+  deleteChat: typeof messageController.deleteChat
 });
 
 // Define routes with explicit error handling
@@ -26,6 +27,11 @@ router.post('/create', authMiddleware, (req, res) => {
 
 router.post('/send', authMiddleware, (req, res) => {
   messageController.sendMessage(req, res);
+});
+
+// Add a new route for deleting a chat
+router.delete('/chat/:chatId', authMiddleware, (req, res) => {
+  messageController.deleteChat(req, res);
 });
 
 module.exports = router; 

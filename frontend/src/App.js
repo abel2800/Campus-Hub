@@ -1,11 +1,12 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { ConfigProvider } from 'antd';
+import { ConfigProvider, theme } from 'antd';
 import LandingPage from './components/LandingPage';
 import CreateAccount from './components/CreateAccount';
 import DashboardPage from './components/DashboardPage';
 import { NotificationProvider } from './context/NotificationContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { ThemeProvider, useTheme } from './contexts/ThemeContext';
 import Chat from './components/ChatPage';
 import SocialMediaPage from './components/SocialMediaPage';
 import Friends from './components/Friends';
@@ -24,17 +25,39 @@ import TeacherRegistration from './pages/TeacherRegistration';
 import LoginPage from './components/LoginPage';
 import NotificationsPage from './pages/NotificationsPage';
 import { Spin } from 'antd';
+import './styles/theme.css'; // Import theme styles
+
+const { defaultAlgorithm, darkAlgorithm } = theme;
 
 // App with Router
 function App() {
   return (
     <Router>
-      <ConfigProvider>
-        <Routes>
-          <Route path="/*" element={<AppWithProviders />} />
-        </Routes>
-      </ConfigProvider>
+      <ThemeProvider>
+        <AppWithTheme />
+      </ThemeProvider>
     </Router>
+  );
+}
+
+// Component with theme
+function AppWithTheme() {
+  const { darkMode } = useTheme();
+  
+  return (
+    <ConfigProvider
+      theme={{
+        algorithm: darkMode ? darkAlgorithm : defaultAlgorithm,
+        token: {
+          colorPrimary: '#1890ff',
+          borderRadius: 6,
+        },
+      }}
+    >
+      <Routes>
+        <Route path="/*" element={<AppWithProviders />} />
+      </Routes>
+    </ConfigProvider>
   );
 }
 

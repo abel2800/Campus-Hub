@@ -1,0 +1,198 @@
+/* Theme Styles */
+
+/* Dark Theme (default from screenshots) */
+body.dark-theme {
+  background-color: #121212;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+/* Light Theme */
+body.light-theme {
+  background-color: #f5f5f5;
+  color: rgba(0, 0, 0, 0.85);
+}
+
+/* Common styles for both themes with theme-specific variables */
+
+/* Dark theme components */
+.dark-theme .ant-layout {
+  background-color: #121212;
+}
+
+.dark-theme .ant-layout-header {
+  background-color: #1f1f1f;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.dark-theme .ant-layout-sider {
+  background-color: #1f1f1f;
+}
+
+.dark-theme .ant-layout-content {
+  background-color: #121212;
+}
+
+.dark-theme .ant-layout-footer {
+  background-color: #1f1f1f;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.dark-theme .ant-menu {
+  background-color: #1f1f1f;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.dark-theme .ant-menu-item {
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.dark-theme .ant-menu-item:hover {
+  color: #1890ff;
+}
+
+.dark-theme .ant-menu-item-selected {
+  background-color: #000;
+  color: #1890ff;
+}
+
+.dark-theme .ant-card {
+  background-color: #1f1f1f;
+  color: rgba(255, 255, 255, 0.85);
+  border-color: #303030;
+}
+
+.dark-theme .ant-btn {
+  border-color: #303030;
+}
+
+.dark-theme .ant-btn-default {
+  background-color: #1f1f1f;
+  color: rgba(255, 255, 255, 0.85);
+  border-color: #303030;
+}
+
+.dark-theme .ant-typography {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.dark-theme .ant-input,
+.dark-theme .ant-input-password {
+  background-color: #2a2a2a;
+  color: rgba(255, 255, 255, 0.85);
+  border-color: #303030;
+}
+
+.dark-theme .ant-input-affix-wrapper {
+  background-color: #2a2a2a;
+  border-color: #303030;
+}
+
+.dark-theme .ant-form-item-label > label {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.dark-theme .ant-table {
+  background-color: #1f1f1f;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.dark-theme .ant-table-thead > tr > th {
+  background-color: #2a2a2a;
+  color: rgba(255, 255, 255, 0.85);
+  border-bottom: 1px solid #303030;
+}
+
+.dark-theme .ant-table-tbody > tr > td {
+  border-bottom: 1px solid #303030;
+}
+
+.dark-theme .ant-modal-content {
+  background-color: #1f1f1f;
+}
+
+.dark-theme .ant-modal-header {
+  background-color: #1f1f1f;
+  border-bottom: 1px solid #303030;
+}
+
+.dark-theme .ant-modal-title {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+/* Specific styles for components in screenshots */
+.dark-theme .chatContainer,
+.dark-theme .messageList {
+  background-color: #121212;
+}
+
+.dark-theme .messageItem {
+  background-color: #1f1f1f;
+}
+
+.dark-theme .sidebar {
+  background-color: #1f1f1f;
+}
+
+/* Light theme components */
+.light-theme .ant-layout {
+  background-color: #f5f5f5;
+}
+
+.light-theme .ant-layout-header {
+  background-color: #fff;
+}
+
+.light-theme .ant-layout-sider {
+  background-color: #fff;
+}
+
+.light-theme .ant-layout-content {
+  background-color: #f5f5f5;
+}
+
+.light-theme .ant-layout-footer {
+  background-color: #fff;
+}
+
+.light-theme .sidebar {
+  background-color: #fff;
+}
+
+/* App-specific components based on screenshots */
+.light-theme .chat-sidebar {
+  background-color: #fff;
+  border-right: 1px solid #e8e8e8;
+}
+
+/* Teacher dashboard */
+.dark-theme .teacher-dashboard-card {
+  background-color: #1f1f1f;
+  border: 1px solid #303030;
+}
+
+.light-theme .teacher-dashboard-card {
+  background-color: #fff;
+  border: 1px solid #e8e8e8;
+}
+
+/* Override Ant Design's default styles for dark theme */
+.dark-theme .ant-btn-primary {
+  background-color: #1890ff;
+}
+
+.dark-theme .ant-switch {
+  background-color: rgba(255, 255, 255, 0.3);
+}
+
+.dark-theme .ant-switch-checked {
+  background-color: #1890ff;
+}
+
+/* Navigation, seen in screenshots */
+.dark-theme .nav-menu {
+  background-color: #1f1f1f;
+}
+
+.light-theme .nav-menu {
+  background-color: #fff;
+} 

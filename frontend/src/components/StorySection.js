@@ -308,7 +308,7 @@ const StorySection = ({ onStoryAdded }) => {
         });
       }
       
-      const response = await api.get('/api/stories/friends');
+      const response = await api.get('/api/stories');
       console.log('Stories fetched:', response.data.length);
       
       // Process the stories to ensure they have all required fields

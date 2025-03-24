@@ -1,7 +1,9 @@
-const { DataTypes } = require('sequelize');
+const { DataTypes, Model } = require('sequelize');
 const sequelize = require('../config/database');
 
-const Story = sequelize.define('Story', {
+class Story extends Model {}
+
+Story.init({
   id: {
     type: DataTypes.INTEGER,
     primaryKey: true,
@@ -19,9 +21,14 @@ const Story = sequelize.define('Story', {
     type: DataTypes.STRING,
     allowNull: false
   },
-  type: {
-    type: DataTypes.STRING,
+  mediaType: {
+    type: DataTypes.ENUM('image', 'video'),
+    allowNull: false,
     defaultValue: 'image'
+  },
+  caption: {
+    type: DataTypes.STRING,
+    allowNull: true
   },
   expiresAt: {
     type: DataTypes.DATE,
@@ -31,10 +38,26 @@ const Story = sequelize.define('Story', {
       date.setHours(date.getHours() + 24);
       return date;
     }
+  },
+  likes: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0
   }
 }, {
+  sequelize,
+  modelName: 'Story',
   tableName: 'Stories',
-  timestamps: true
+  timestamps: true,
+  indexes: [
+    {
+      name: 'story_user_idx',
+      fields: ['userId']
+    },
+    {
+      name: 'story_expiration_idx',
+      fields: ['expiresAt']
+    }
+  ]
 });
 
 module.exports = Story; 

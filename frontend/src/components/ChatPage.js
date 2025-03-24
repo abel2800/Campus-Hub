@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import styled from 'styled-components';
-import { Input, Avatar, Upload, Button, message, Spin, Empty, Divider, List, Tooltip, Badge } from 'antd';
-import { SendOutlined, PictureOutlined, SearchOutlined, UserAddOutlined, MailOutlined, UserOutlined } from '@ant-design/icons';
+import { Input, Avatar, Upload, Button, message, Spin, Empty, Divider, List, Tooltip, Badge, Popconfirm, Modal } from 'antd';
+import { SendOutlined, PictureOutlined, SearchOutlined, UserAddOutlined, MailOutlined, UserOutlined, DeleteOutlined } from '@ant-design/icons';
 import api from '../utils/axios';
 import { useSocket } from '../contexts/SocketContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -109,6 +109,37 @@ const Tab = styled.div`
   
   &:hover {
     color: #1890ff;
+  }
+`;
+
+// Add this new styled component for the delete button
+const DeleteButton = styled.div`
+  visibility: hidden;
+  color: #ff4d4f;
+  padding: 8px;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: all 0.2s;
+  
+  &:hover {
+    background-color: rgba(255, 77, 79, 0.1);
+  }
+`;
+
+const ChatItem = styled.div`
+  padding: 12px 16px;
+  border-bottom: 1px solid #f0f0f0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  transition: background-color 0.3s;
+  
+  &:hover {
+    background-color: #f9f9f9;
+  }
+  
+  &:hover ${DeleteButton} {
+    visibility: visible;
   }
 `;
 
@@ -618,6 +649,42 @@ const ChatPage = () => {
     return '/default-course-image.jpg';
   };
 
+  // Update the deleteChat function to handle different chat ID structures
+  const deleteChat = async (chat, event) => {
+    // Stop event propagation to prevent opening the chat
+    event.stopPropagation();
+    
+    // Extract the chat ID - check for different possible structures
+    const chatId = chat.id || chat.chatId || (chat.lastMessage && chat.lastMessage.id);
+    
+    if (!chatId) {
+      message.error('Unable to delete chat: Chat ID not found');
+      return;
+    }
+    
+    try {
+      await api.delete(`/api/messages/chat/${chatId}`);
+      message.success('Chat deleted successfully');
+      
+      // Update the recentChats state by removing the deleted chat
+      setRecentChats(prevChats => prevChats.filter(c => 
+        (c.id !== chatId) && 
+        (c.chatId !== chatId) && 
+        (!c.lastMessage || c.lastMessage.id !== chatId)
+      ));
+      
+      // If the deleted chat was selected, clear the selection
+      if (selectedFriend && selectedFriend.id === chat.participant?.id) {
+        setSelectedFriend(null);
+        setMessages([]);
+        navigate('/chat', { replace: true });
+      }
+    } catch (error) {
+      console.error('Error deleting chat:', error);
+      message.error('Failed to delete chat');
+    }
+  };
+
   return (
     <ChatContainer>
       <ConversationsList>
@@ -743,63 +810,66 @@ const ChatPage = () => {
                     const messageTime = chat.created_at || chat.createdAt || chat.lastMessage?.createdAt;
                     
                     return (
-                      <div 
+                      <ChatItem 
                         key={chat.id || `chat-${friend.id}`}
+                        style={{ 
+                          backgroundColor: isSelected ? '#e6f7ff' : 'white',
+                        }}
                         onClick={() => {
                           setSelectedFriend(friend);
                           loadMessageHistory(friend.id);
                           navigate(`/chat/${friend.id}`, { replace: true });
                         }}
-                        style={{ 
-                          padding: '12px 16px', 
-                          borderBottom: '1px solid #f0f0f0',
-                          backgroundColor: isSelected ? '#e6f7ff' : 'white',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          transition: 'background-color 0.3s'
-                        }}
                       >
-                        <Avatar 
-                          src={friend.avatar}
-                          icon={<UserOutlined />}
-                          size={40}
-                          style={{ marginRight: '12px', flexShrink: 0 }}
-                        />
+                        <Badge dot={chat.unread > 0} offset={[-2, 2]} color="#1890ff">
+                          <Avatar 
+                            src={friend.avatar} 
+                            icon={!friend.avatar && <UserOutlined />} 
+                            style={{ marginRight: 12 }}
+                          />
+                        </Badge>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ 
+                            fontWeight: chat.unread > 0 ? 'bold' : 'normal',
                             display: 'flex', 
-                            justifyContent: 'space-between', 
-                            alignItems: 'center'
+                            justifyContent: 'space-between'
                           }}>
-                            <div style={{ 
-                              fontWeight: 'bold',
-                              whiteSpace: 'nowrap',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis'
+                            <span style={{ 
+                              overflow: 'hidden', 
+                              textOverflow: 'ellipsis', 
+                              whiteSpace: 'nowrap' 
                             }}>
-                              {friend.username || 'Unknown User'}
-                            </div>
-                            <div style={{ 
-                              fontSize: '12px', 
-                              color: '#8c8c8c',
-                              flexShrink: 0,
-                              marginLeft: '8px'
-                            }}>
-                              {formatTime(messageTime)}
-                            </div>
+                              {friend.username || friend.name}
+                            </span>
+                            <small style={{ color: '#999', fontSize: '0.85em' }}>
+                              {messageTime ? formatTime(new Date(messageTime)) : ''}
+                            </small>
                           </div>
                           <div style={{ 
-                            fontSize: '13px', 
-                            color: '#8c8c8c',
+                            color: '#999', 
+                            fontSize: '0.9em',
+                            overflow: 'hidden', 
+                            textOverflow: 'ellipsis', 
                             whiteSpace: 'nowrap',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis'
+                            maxWidth: '200px'
                           }}>
                             {lastMessage}
                           </div>
                         </div>
-                      </div>
+                        <Popconfirm
+                          title="Delete Chat"
+                          description="Are you sure you want to delete this conversation? This action cannot be undone."
+                          onConfirm={(e) => deleteChat(chat, e)}
+                          okText="Delete"
+                          cancelText="Cancel"
+                          placement="left"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <DeleteButton>
+                            <DeleteOutlined />
+                          </DeleteButton>
+                        </Popconfirm>
+                      </ChatItem>
                     );
                   })}
               </div>

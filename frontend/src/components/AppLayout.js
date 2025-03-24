@@ -17,6 +17,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import '../styles/global.css';
 import api from '../utils/axios';
+import ThemeToggle from './ThemeToggle';
 
 const { Header, Sider, Content } = Layout;
 
@@ -203,13 +204,7 @@ const AppLayout = ({ children }) => {
   );
 
   // Add teacher-specific menu items if the user is a teacher
-  const teacherMenuItems = isTeacher() ? [
-    {
-      key: 'teacher-home',
-      icon: <HomeOutlined />,
-      label: <Link to="/teacher/home">Teacher Home</Link>,
-    },
-  ] : [];
+  const teacherMenuItems = [];
 
   // Include the teacher menu items in the menu
   const menuItems = [
@@ -338,6 +333,7 @@ const AppLayout = ({ children }) => {
             </span>
           </div>
           <div className="header-right" style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <ThemeToggle style={{ marginRight: '8px' }} />
             <Dropdown 
               overlay={notificationMenu} 
               trigger={['click']} 
