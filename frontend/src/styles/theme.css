@@ -195,4 +195,69 @@ body.light-theme {
 
 .light-theme .nav-menu {
   background-color: #fff;
+}
+
+/* Responsive theme styles */
+@media (max-width: 992px) {
+  /* Dark theme mobile adjustments */
+  .dark-theme .ant-layout-sider {
+    box-shadow: 2px 0 8px rgba(0, 0, 0, 0.3);
+  }
+
+  /* Light theme mobile adjustments */
+  .light-theme .ant-layout-sider {
+    box-shadow: 2px 0 8px rgba(0, 0, 0, 0.1);
+  }
+  
+  /* Mobile header adjustments */
+  .dark-theme .ant-layout-header,
+  .light-theme .ant-layout-header {
+    padding: 0 16px;
+  }
+}
+
+@media (max-width: 768px) {
+  /* Simplified card styles for mobile */
+  .dark-theme .ant-card,
+  .light-theme .ant-card {
+    margin-bottom: 16px;
+  }
+  
+  /* Adjust modal styles for mobile */
+  .dark-theme .ant-modal-content,
+  .light-theme .ant-modal-content {
+    border-radius: 8px;
+  }
+  
+  /* Mobile navigation adjustments */
+  .dark-theme .mobile-menu-button {
+    color: rgba(255, 255, 255, 0.85);
+  }
+  
+  .light-theme .mobile-menu-button {
+    color: rgba(0, 0, 0, 0.85);
+  }
+  
+  /* Mobile overlay adjustments */
+  .dark-theme .mobile-overlay {
+    background-color: rgba(0, 0, 0, 0.7);
+  }
+  
+  .light-theme .mobile-overlay {
+    background-color: rgba(0, 0, 0, 0.5);
+  }
+}
+
+@media (max-width: 480px) {
+  /* Card adjustments for small screens */
+  .dark-theme .ant-card-body,
+  .light-theme .ant-card-body {
+    padding: 12px;
+  }
+  
+  /* Form adjustments for small screens */
+  .dark-theme .ant-form-item,
+  .light-theme .ant-form-item {
+    margin-bottom: 16px;
+  }
 } 

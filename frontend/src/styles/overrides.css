@@ -58,3 +58,92 @@
   padding-right: 8px !important;
   padding-left: 8px !important;
 }
+
+/* Responsive overrides for Ant Design components */
+@media (max-width: 992px) {
+  /* Adjust card sizes for tablets */
+  .ant-col-md-8 {
+    max-width: 50%;
+  }
+  
+  /* Adjust modal sizes */
+  .ant-modal {
+    max-width: 90%;
+    margin: 10px auto;
+  }
+  
+  /* Make dropdown menus more touch-friendly */
+  .ant-dropdown-menu-item, 
+  .ant-select-item {
+    padding: 10px 12px;
+    min-height: 40px;
+  }
+  
+  /* Larger form controls for better touch targets */
+  .ant-form-item-control-input {
+    min-height: 40px;
+  }
+}
+
+@media (max-width: 768px) {
+  /* Full width cards on mobile */
+  .ant-col-md-8,
+  .ant-col-sm-12 {
+    max-width: 100%;
+  }
+  
+  /* Adjust form layout for mobile */
+  .ant-form-item-label {
+    padding: 0 0 8px;
+    text-align: left;
+  }
+  
+  /* Stack form items vertically */
+  .ant-form-horizontal .ant-form-item-label,
+  .ant-form-horizontal .ant-form-item-control {
+    display: block;
+    width: 100%;
+  }
+  
+  /* Larger buttons for mobile */
+  .ant-btn {
+    height: 40px;
+    padding: 4px 16px;
+    font-size: 16px;
+  }
+  
+  /* Adjust table for mobile */
+  .ant-table {
+    overflow-x: auto;
+  }
+  
+  /* Make tabs more mobile-friendly */
+  .ant-tabs-tab {
+    margin: 0 10px 0 0;
+    padding: 12px 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  /* Full-width modal on small screens */
+  .ant-modal {
+    max-width: 100%;
+    margin: 10px;
+  }
+  
+  /* Adjust card padding */
+  .ant-card-body {
+    padding: 12px;
+  }
+  
+  /* Stack buttons in card actions */
+  .ant-card-actions {
+    display: flex;
+    flex-direction: column;
+  }
+  
+  /* Smaller padding for list items */
+  .ant-list-item {
+    padding: 10px;
+  }
+}

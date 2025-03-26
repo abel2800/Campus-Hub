@@ -11,14 +11,6 @@ Campus Hub is an advanced e-learning and social media platform designed to enhan
 - **Grade Management:** Teachers can assign grades and students can track their performance
 - **Progress Tracking:** Real-time tracking of video completion and course progress
 
-<<<<<<< HEAD
-### 🏫 Social Media
-- **User Profiles:** Customizable profiles with avatars and biographical information
-- **Social Posts:** Students can create posts with text, photos, and videos
-- **Interactions:** Like, comment, and share functionality for all posts
-- **Friend System:** Add friends and manage connections
-- **Real-time Chat:** Private messaging between users with notification support
-=======
 ### 🏫 Social Media (for Students & Teachers)
 - **User Profiles:** Customizable profiles with avatars and biographical information
 - **Social Posts:** Users can create posts with text, photos, and videos
@@ -26,7 +18,6 @@ Campus Hub is an advanced e-learning and social media platform designed to enhan
 - **Interactions:** Like, comment, and share functionality for all posts
 - **Friend System:** Add friends and manage connections between students and teachers
 - **Real-time Chat:** Private messaging between all platform users with notification support
->>>>>>> bb52ff8 (full complet code no error)
 
 ### 👨‍🏫 Teacher Features
 - **Dashboard:** Analytics showing student counts, revenue, and overall engagement
@@ -34,8 +25,6 @@ Campus Hub is an advanced e-learning and social media platform designed to enhan
 - **Student Management:** View enrolled students and their progress
 - **Performance Metrics:** Track student engagement and success rates
 - **Grade Assignment:** Assign and manage student grades
-<<<<<<< HEAD
-=======
 - **Teacher Social Networking:** Connect with students through the same social features available to students
 - **View Switching:** Easily switch between teacher dashboard and student view modes
 
@@ -44,7 +33,6 @@ Campus Hub is an advanced e-learning and social media platform designed to enhan
 - **Teachers:** Full course management capabilities plus access to the same social networking features as students
 - **Shared Features:** Both students and teachers can use profiles, social media, chat, and friend connections
 - **Dual Interface:** Teachers can access both the teaching dashboard and student experience from the same account
->>>>>>> bb52ff8 (full complet code no error)
 
 ## Technical Architecture
 
@@ -69,7 +57,7 @@ Campus Hub is an advanced e-learning and social media platform designed to enhan
 ### Prerequisites
 Ensure you have the following installed:
 - [Node.js](https://nodejs.org/) (v14 or higher)
-- [Yarn](https://yarnpkg.com/) (v1.22 or higher)
+- [Yarn](https://yarnpkg.com/) (v1.22 or higher) or [npm](https://www.npmjs.com/) (v6 or higher)
 - [PostgreSQL](https://www.postgresql.org/) (v12 or higher)
 - Git
 
@@ -87,9 +75,12 @@ cd backend
 
 # Install dependencies
 yarn install
+# OR with npm
+npm install
 
 # Create a .env file
 cp .env.example .env
+# If .env.example doesn't exist, create .env with the content below
 ```
 
 Edit the `.env` file with your database credentials and other configuration options:
@@ -107,9 +98,13 @@ PORT=5000
 ```sh
 # Run database migrations
 yarn migrate
+# OR with npm
+npx sequelize-cli db:migrate
 
 # Start the backend server
 yarn dev
+# OR with npm
+npm run dev
 ```
 
 #### 3. Set up the frontend
@@ -118,9 +113,12 @@ cd ../frontend
 
 # Install dependencies
 yarn install
+# OR with npm
+npm install
 
 # Create a .env file
 cp .env.example .env
+# If .env.example doesn't exist, create .env with the content below
 ```
 
 Edit the `.env` file:
@@ -131,9 +129,43 @@ REACT_APP_API_URL=http://localhost:5000
 ```sh
 # Start the frontend development server
 yarn start
+# OR with npm
+npm start
 ```
 
 The frontend will start on `http://localhost:3000`, and the backend will run on `http://localhost:5000`.
+
+### Required Packages
+If you encounter any missing dependencies, ensure you have these installed:
+
+#### Backend Dependencies:
+```sh
+# Core dependencies
+yarn add express sequelize pg pg-hstore bcrypt jsonwebtoken cors dotenv socket.io
+# OR with npm
+npm install express sequelize pg pg-hstore bcrypt jsonwebtoken cors dotenv socket.io
+
+# Dev dependencies
+yarn add -D nodemon sequelize-cli
+# OR with npm
+npm install -D nodemon sequelize-cli
+```
+
+#### Frontend Dependencies:
+```sh
+# Core dependencies
+yarn add react react-dom react-router-dom antd @ant-design/icons axios socket.io-client moment
+# OR with npm
+npm install react react-dom react-router-dom antd @ant-design/icons axios socket.io-client moment
+```
+
+### Cross-Device Compatibility
+The website is designed to be responsive and works on different devices:
+- **Desktop/Laptop:** Full experience with all features
+- **Tablet:** Optimized layout with adapted navigation
+- **Mobile:** Streamlined interface with touch-friendly controls
+
+The responsive design automatically adjusts to your screen size. No additional setup is required for mobile compatibility.
 
 ## Database Schema
 
@@ -171,6 +203,15 @@ The API follows RESTful principles with the following main endpoints:
 - `GET /api/friends` - List user's friends
 - `POST /api/friends/request` - Send a friend request
 
+## Troubleshooting
+
+### Common Issues
+- **Database Connection:** Ensure PostgreSQL is running and credentials are correct
+- **Missing Tables:** Run the migrations to create all required database tables
+- **CORS Errors:** Make sure backend and frontend URLs are configured correctly
+- **Mobile Display Issues:** If encountering display problems on mobile, clear browser cache
+- **Video Playback:** Ensure proper codecs are installed for video playback
+
 ## Contributing
 Contributions are welcome! Follow these steps:
 1. Fork the repository
@@ -183,8 +224,4 @@ Contributions are welcome! Follow these steps:
 This project is licensed under the MIT License.
 
 ---
-<<<<<<< HEAD
-Developed by **Abel Sirak Kebede** 🚀 
-=======
-Developed by **Abel Sirak Kebede** 🚀 
->>>>>>> bb52ff8 (full complet code no error)
+Developed by **Abel Sirak Kebede** 🚀

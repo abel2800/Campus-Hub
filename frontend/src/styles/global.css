@@ -443,6 +443,48 @@ a {
     max-height: 600px;
     overflow-y: auto;
   }
+
+  .teacher-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 992px) {
+  .header-center {
+    display: none;
+  }
+  
+  .site-layout-content, .site-layout-content.collapsed {
+    margin-left: 0;
+    width: 100%;
+  }
+  
+  .app-content {
+    margin-left: 0;
+  }
+
+  .page-content {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .ant-layout-sider {
+    position: fixed;
+    left: -200px;
+    transition: left 0.3s ease;
+  }
+
+  .ant-layout-sider.mobile-visible {
+    left: 0;
+  }
+
+  .ant-layout-sider-collapsed {
+    left: -80px;
+  }
+
+  .ant-layout-sider-collapsed.mobile-visible {
+    left: 0;
+  }
 }
 
 @media (max-width: 768px) {
@@ -472,4 +514,92 @@ a {
     position: absolute;
     z-index: 1001;
   }
+
+  .header-right {
+    gap: 8px;
+  }
+  
+  .teacher-stats {
+    grid-template-columns: 1fr;
+  }
+  
+  /* Adjust course video container for mobile */
+  .course-video-container {
+    flex-direction: column;
+  }
+  
+  /* Make video player responsive */
+  .player-wrapper {
+    padding-top: 56.25%; /* Maintain 16:9 aspect ratio */
+  }
+}
+
+@media (max-width: 480px) {
+  .logo {
+    font-size: 16px;
+    padding: 0 8px;
+  }
+  
+  .header-left {
+    padding-left: 8px;
+  }
+  
+  .header-right {
+    padding-right: 8px;
+  }
+  
+  .site-content, .app-content, .page-content {
+    padding: 12px;
+  }
+  
+  .content-container {
+    padding: 16px;
+  }
+  
+  .course-card-actions {
+    flex-direction: column;
+    gap: 8px;
+  }
+  
+  .course-image, .course-card-cover {
+    height: 120px;
+  }
+
+  /* Smaller fonts for mobile */
+  .course-title, .course-card-title {
+    font-size: 14px;
+  }
+  
+  .course-description, .course-card-description {
+    font-size: 12px;
+  }
+}
+
+/* Mobile menu button */
+.mobile-menu-button {
+  display: none;
+  font-size: 20px;
+  cursor: pointer;
+}
+
+@media (max-width: 992px) {
+  .mobile-menu-button {
+    display: block;
+  }
+}
+
+/* Mobile overlay for when sidebar is open */
+.mobile-overlay {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+}
+
+.mobile-overlay.visible {
+  display: block;
 }
