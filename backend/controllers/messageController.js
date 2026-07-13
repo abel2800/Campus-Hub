@@ -1,12 +1,15 @@
-const { Message, User } = require('../models');
+const { Message, User, Friend } = require('../models');
 const { Op } = require('sequelize');
 const sequelize = require('sequelize');
+const { assertFriends, areFriends } = require('../utils/friendship');
 
 const messageController = {
   getMessages: async (req, res) => {
     try {
       const userId = req.user.id;
       const { participantId } = req.params;
+
+      await assertFriends(userId, participantId);
 
       console.log(`Fetching messages between users ${userId} and ${participantId}`);
 
@@ -35,6 +38,9 @@ const messageController = {
       console.log(`Found ${messages.length} messages`);
       res.json(messages);
     } catch (error) {
+      if (error.status) {
+        return res.status(error.status).json({ message: error.message });
+      }
       console.error('Get messages error:', error);
       res.status(500).json({ message: 'Server error', error: error.message });
     }
@@ -44,6 +50,8 @@ const messageController = {
     try {
       const userId = req.user.id;
       const { participantId } = req.body;
+
+      await assertFriends(userId, participantId);
 
       console.log(`Creating chat between users ${userId} and ${participantId}`);
 
@@ -73,6 +81,9 @@ const messageController = {
       console.log('Chat created successfully');
       res.json(messageWithUser);
     } catch (error) {
+      if (error.status) {
+        return res.status(error.status).json({ message: error.message });
+      }
       console.error('Create chat error:', error);
       res.status(500).json({ message: 'Server error', error: error.message });
     }
@@ -100,6 +111,8 @@ const messageController = {
         console.error('Missing content in request');
         return res.status(400).json({ message: 'Message content is required' });
       }
+
+      await assertFriends(userId, participantId);
 
       // Get sender info for notification
       const sender = await User.findByPk(userId, {
@@ -145,11 +158,14 @@ const messageController = {
       );
 
       if (req.app.io) {
-        req.app.io.to(`user_${participantId}`).emit('new_message', messageWithUser);
+        req.app.io.to(`user:${participantId}`).emit('new_message', messageWithUser);
       }
 
       res.json(messageWithUser);
     } catch (error) {
+      if (error.status) {
+        return res.status(error.status).json({ message: error.message });
+      }
       console.error('Send message error:', error);
       res.status(500).json({ message: 'Server error', error: error.message });
     }
@@ -159,6 +175,16 @@ const messageController = {
     try {
       const userId = req.user.id;
       console.log('Fetching recent chats for user:', userId);
+
+      const friendRows = await Friend.findAll({
+        where: { userId },
+        attributes: ['friendId'],
+      });
+      const friendIds = new Set(friendRows.map((f) => f.friendId));
+
+      if (friendIds.size === 0) {
+        return res.json([]);
+      }
 
       // First, get the latest message for each conversation
       const latestMessages = await Message.findAll({
@@ -224,7 +250,8 @@ const messageController = {
       });
 
       // Transform messages to include participant info
-      const enrichedMessages = messages.map(message => {
+      const enrichedMessages = messages
+        .map((message) => {
         const messageData = message.toJSON();
         
         // Determine which user is the conversation participant (not the current user)
@@ -233,6 +260,7 @@ const messageController = {
         
         return {
           ...messageData,
+          lastMessage: message.content,
           participant: participant ? {
             id: participant.id,
             username: participant.username,
@@ -240,7 +268,8 @@ const messageController = {
             department: participant.department
           } : null
         };
-      });
+      })
+        .filter((m) => m.participant && friendIds.has(m.participant.id));
 
       console.log(`Returning ${enrichedMessages.length} enriched conversations`);
       res.json(enrichedMessages);

@@ -13,6 +13,7 @@ const messageRoutes = require('./routes/messageRoutes');
 const courseRoutes = require('./routes/courseRoutes');
 const postRoutes = require('./routes/postRoutes');
 const storyRoutes = require('./routes/storyRoutes');
+const mobileRoutes = require('./routes/mobileRoutes');
 const jwt = require('jsonwebtoken');
 const { Course, CourseVideo } = require('./models');
 require('dotenv').config();
@@ -91,6 +92,7 @@ app.use('/api/messages', messageRoutes);
 app.use('/api/courses', courseRoutes);
 app.use('/api/posts', postRoutes);
 app.use('/api/stories', storyRoutes);
+app.use('/api/mobile', mobileRoutes);
 app.use('/api/teacher', require('./routes/teacherRoutes'));
 
 // Socket.io connection
@@ -320,27 +322,34 @@ async function seedCourseVideos(courses) {
   }
 }
 
-// Start server
-const PORT = process.env.PORT || 5000;
-server.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
-
-// Database connection
-sequelize.authenticate()
-  .then(() => {
-    console.log('Database connected successfully');
-    
-    // Sync models with database
-    return sequelize.sync({ alter: true, force: false })
-      .then(() => {
-        console.log('Database models synchronized successfully');
-        // Additional initialization if needed
-      })
-      .catch(err => {
-        console.error('Failed to synchronize database models:', err);
+// Export the app for testing
+if (process.env.NODE_ENV === 'test') {
+  module.exports = app;
+} else {
+  // Database connection and server startup only in non-test environment
+  sequelize.authenticate()
+    .then(() => {
+      console.log('Database connected successfully');
+      
+      // Sync models with database
+      return sequelize.sync({ alter: true, force: false })
+        .then(() => {
+          console.log('Database models synchronized successfully');
+          // Seed initial courses after database sync
+          return seedInitialCourses();
+        })
+        .catch(err => {
+          console.error('Failed to synchronize database models:', err);
+        });
+    })
+    .then(() => {
+      // Start the server
+      const PORT = process.env.PORT || 5000;
+      server.listen(PORT, () => {
+        console.log(`Server is running on port ${PORT}`);
       });
-  })
-  .catch(err => {
-    console.error('Unable to connect to the database:', err);
-  });
+    })
+    .catch(err => {
+      console.error('Unable to connect to the database:', err);
+    });
+}

@@ -172,9 +172,14 @@ const authController = {
   getMe: async (req, res) => {
     try {
       const user = await User.findByPk(req.user.id, {
-        attributes: { exclude: ['password'] }
+        attributes: { exclude: ['password'] },
       });
-      res.json(user);
+      if (!user) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+      const { resolveUserRole, serializeUser } = require('../utils/authResponse');
+      const role = await resolveUserRole(user);
+      res.json(serializeUser(user, role));
     } catch (error) {
       console.error('Get user error:', error);
       res.status(500).json({ message: 'Error fetching user data' });

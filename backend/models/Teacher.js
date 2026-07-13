@@ -24,6 +24,19 @@ const Teacher = sequelize.define('Teacher', {
     type: DataTypes.STRING,
     allowNull: true
   },
+  teacherId: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    unique: true
+  },
+  specialization: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  qualification: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
   isVerified: {
     type: DataTypes.BOOLEAN,
     defaultValue: false

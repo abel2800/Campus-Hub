@@ -79,8 +79,9 @@ const teacherController = {
   // Get teacher's courses
   getCourses: async (req, res) => {
     try {
+      const instructorId = req.instructorId || req.user.id;
       const courses = await Course.findAll({
-        where: { instructorId: req.teacher.id },
+        where: { instructorId },
         include: [{
           model: CourseVideo,
           as: 'videos'
@@ -131,14 +132,16 @@ const teacherController = {
       const thumbnailPath = req.file ? req.file.filename : null;
       
       // Create the course
+      const instructorId = req.instructorId || req.user.id;
       const course = await Course.create({
         title,
         description,
-        instructorId: req.teacher.id,
+        instructorId,
         thumbnail: thumbnailPath,
         category,
         level,
         duration,
+        status: 'Open',
         expirationDate: expirationDate ? new Date(expirationDate) : null
       });
       
@@ -174,8 +177,9 @@ const teacherController = {
       }
       
       // Verify the course belongs to this teacher
+      const instructorId = req.instructorId || req.user.id;
       const course = await Course.findOne({
-        where: { id: courseId, instructorId: req.teacher.id }
+        where: { id: courseId, instructorId }
       });
       
       if (!course) {
@@ -238,8 +242,9 @@ const teacherController = {
       const { courseId } = req.params;
       
       // Verify the course belongs to this teacher
+      const instructorId = req.instructorId || req.user.id;
       const course = await Course.findOne({
-        where: { id: courseId, instructorId: req.teacher.id }
+        where: { id: courseId, instructorId }
       });
       
       if (!course) {
@@ -277,9 +282,9 @@ const teacherController = {
   // Get analytics data for the teacher dashboard
   getAnalytics: async (req, res) => {
     try {
-      // Get all courses by this teacher
+      const instructorId = req.instructorId || req.user.id;
       const courses = await Course.findAll({
-        where: { instructorId: req.teacher.id }
+        where: { instructorId }
       });
       
       // Course engagement analytics
@@ -349,13 +354,14 @@ const teacherController = {
   getStats: async (req, res) => {
     try {
       // Count all courses by this teacher
+      const instructorId = req.instructorId || req.user.id;
       const totalCourses = await Course.count({
-        where: { instructorId: req.teacher.id }
+        where: { instructorId }
       });
-      
+
       // Get all course IDs by this teacher
       const courses = await Course.findAll({
-        where: { instructorId: req.teacher.id },
+        where: { instructorId },
         attributes: ['id', 'rating']
       });
       

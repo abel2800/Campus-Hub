@@ -62,14 +62,20 @@ User.init({
     type: DataTypes.TEXT,
     allowNull: true,
     defaultValue: JSON.stringify({
-      profileVisibility: 'friends',
+      profileVisibility: 'public',
       searchable: true,
       showCourses: true
     }),
     get() {
       const rawValue = this.getDataValue('privacySettings');
       return rawValue ? JSON.parse(rawValue) : null;
-    }
+    },
+    set(value) {
+      this.setDataValue(
+        'privacySettings',
+        typeof value === 'string' ? value : JSON.stringify(value),
+      );
+    },
   }
 }, {
   sequelize,

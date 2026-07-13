@@ -117,7 +117,7 @@ export const messageService = {
   },
 
   sendMessage: async (recipientId, content) => {
-    const response = await axios.post('/messages/send', { recipientId, content });
+    const response = await axios.post('/messages/send', { participantId: recipientId, content });
     return response.data;
   }
 };
@@ -132,7 +132,7 @@ export const userService = {
     const formData = new FormData();
     formData.append('avatar', file);
     
-    const response = await axios.put('/users/avatar', formData, {
+    const response = await axios.post('/users/avatar', formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     });
     return response.data;

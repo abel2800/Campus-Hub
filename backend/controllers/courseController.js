@@ -1,3 +1,4 @@
+const { Op } = require('sequelize');
 const Course = require('../models/Course');
 const User = require('../models/User');
 const Enrollment = require('../models/Enrollment');
@@ -45,6 +46,13 @@ const courseController = {
     getAllCourses: async (req, res) => {
         try {
             const courses = await Course.findAll({
+                where: {
+                    instructorId: { [Op.ne]: null },
+                    [Op.or]: [
+                        { status: { [Op.in]: ['Open', 'open', 'published', 'Published'] } },
+                        { status: null },
+                    ],
+                },
                 include: [
                     {
                         model: User,
@@ -113,7 +121,7 @@ const courseController = {
             const courseData = {
                 title: req.body.title,
                 description: req.body.description,
-                instructorId: req.body.instructorId || req.body.teacherId,
+                instructorId: req.instructorId || req.user?.id || req.body.instructorId || req.body.teacherId,
                 level: req.body.level || 'beginner',
                 category: req.body.category || 'programming',
                 department: req.body.department || req.body.category?.charAt(0).toUpperCase() + req.body.category?.slice(1) || 'General',

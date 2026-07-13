@@ -19,6 +19,12 @@ const Enrollment = require('./Enrollment');
 const CourseVideo = require('./CourseVideo');
 const Teacher = require('./Teacher');
 const StudentProgress = require('./StudentProgress');
+const PasswordReset = require('./PasswordReset');
+const OtpCode = require('./OtpCode');
+const {
+  UserGamification, Wallet, WalletTransaction, Club, ClubMember,
+  AttendanceRecord, VoiceRoom
+} = require('./MobileFeatures');
 
 // Create a db object to export
 const db = {
@@ -37,6 +43,15 @@ const db = {
   CourseVideo,
   Teacher,
   StudentProgress,
+  PasswordReset,
+  OtpCode,
+  UserGamification,
+  Wallet,
+  WalletTransaction,
+  Club,
+  ClubMember,
+  AttendanceRecord,
+  VoiceRoom,
   sequelize,
   Sequelize
 };

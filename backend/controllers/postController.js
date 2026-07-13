@@ -1,5 +1,7 @@
 const { Post, User, Comment, Like, Friend } = require('../models');
 const { Op } = require('sequelize');
+const { getMutualFriendIds } = require('../utils/friendship');
+const { canViewPosts } = require('../utils/privacy');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
@@ -98,24 +100,10 @@ const getFeed = async (req, res) => {
   try {
     const userId = req.user.id;
     console.log('Getting feed for user:', userId);
-    
-    // Get friend IDs
-    const friends = await Friend.findAll({
-      where: {
-        [Op.or]: [
-          { userId: userId },
-          { friendId: userId }
-        ]
-      }
-    });
-    
-    const friendIds = friends.map(friend => 
-      friend.userId === userId ? friend.friendId : friend.userId
-    );
-    
-    // Add current user to see their own posts
+
+    const friendIds = await getMutualFriendIds(userId);
     friendIds.push(userId);
-    
+
     console.log('Getting posts for user and friends:', friendIds);
     
     // Get posts from friends and user
@@ -285,6 +273,15 @@ const addComment = async (req, res) => {
 const getUserPosts = async (req, res) => {
   try {
     const { userId } = req.params;
+    const target = await User.findByPk(userId);
+    if (!target) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    const allowed = await canViewPosts(req.user.id, target);
+    if (!allowed) {
+      return res.json([]);
+    }
     
     const posts = await Post.findAll({
       where: { userId },
@@ -293,7 +290,7 @@ const getUserPosts = async (req, res) => {
         {
           model: User,
           as: 'user',
-          attributes: ['id', 'username', 'avatar']
+          attributes: ['id', 'username', 'avatar', 'bio']
         },
         {
           model: Comment,
@@ -331,7 +328,7 @@ const getUserPosts = async (req, res) => {
         isLiked: !!isLiked
       };
     }));
-    
+
     res.json(postsWithLikeStatus);
   } catch (error) {
     console.error('Get user posts error:', error);

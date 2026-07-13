@@ -499,7 +499,7 @@ const SocialMediaPage = () => {
     }
 
     try {
-      await api.post(`/api/posts/${postId}/comments`, { content });
+      await api.post(`/api/posts/${postId}/comment`, { content });
       
       // Clear the input field
       setCommentInputs(prev => ({

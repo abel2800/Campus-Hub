@@ -30,18 +30,11 @@ const isTeacher = async (req, res, next) => {
     
     // If no teacher record found, deny access
     if (!teacher) {
-      // For testing purposes, temporarily bypass this check 
-      // and proceed as if the user is a teacher
-      console.log('Teacher record not found, but proceeding anyway for testing');
-      req.teacher = { id: req.user.id, userId: req.user.id }; // Mock teacher object
-      return next();
-      
-      // Uncomment this when Teacher table is properly set up
-      // return res.status(403).json({ message: 'Access denied - Teacher privileges required' });
+      return res.status(403).json({ message: 'Access denied - Teacher privileges required' });
     }
     
-    // Add the teacher object to the request for use in subsequent middleware/routes
     req.teacher = teacher;
+    req.instructorId = teacher.userId;
     
     // User is a teacher, proceed to the next middleware/route
     next();

@@ -63,7 +63,7 @@ const FindFriends = ({ onRequestSent }) => {
   return (
     <div className="find-friends-container">
       <Search
-        placeholder="Search users by name..."
+        placeholder="Search users by username..."
         value={searchQuery}
         onChange={(e) => setSearchQuery(e.target.value)}
         style={{ width: '100%', marginBottom: '20px' }}
@@ -107,13 +107,31 @@ const FindFriends = ({ onRequestSent }) => {
                 <Button
                   type="primary"
                   icon={<UserAddOutlined />}
-                  onClick={() => handleSendRequest(user.id)}
+                  onClick={() => {
+                    if (user.friendshipStatus === 'incoming' && user.requestId) {
+                      axios.post(`/api/friends/requests/${user.requestId}/accept`)
+                        .then(() => {
+                          toast.success('Friend request accepted!');
+                          setSearchResults(prevResults =>
+                            prevResults.map(u =>
+                              u.id === user.id ? { ...u, friendshipStatus: 'accepted' } : u
+                            )
+                          );
+                          if (onRequestSent) onRequestSent();
+                        })
+                        .catch(() => toast.error('Failed to accept request'));
+                      return;
+                    }
+                    handleSendRequest(user.id);
+                  }}
                   disabled={user.friendshipStatus === 'pending' || user.friendshipStatus === 'accepted'}
                 >
                   {user.friendshipStatus === 'pending' 
                     ? 'Request Sent'
                     : user.friendshipStatus === 'accepted'
                     ? 'Friends'
+                    : user.friendshipStatus === 'incoming'
+                    ? 'Accept Request'
                     : 'Add Friend'
                   }
                 </Button>

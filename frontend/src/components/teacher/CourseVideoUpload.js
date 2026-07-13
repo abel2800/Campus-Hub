@@ -191,34 +191,7 @@ const CourseVideoUpload = ({ courseId: propsCourseId, onVideoAdded }) => {
         clearInterval(progressInterval);
         addDebug(`Upload error: ${uploadError.message}`);
         setUploadStatus('Upload failed');
-        
-        // Try with a mock upload as fallback
-        addDebug('Attempting fallback...');
-        try {
-          // Create a mock response for testing
-          const mockVideoData = {
-            id: Date.now(),
-            title: values.title,
-            description: values.description || '',
-            videoUrl: URL.createObjectURL(file),
-            thumbnail: '/uploads/courses/thumbnails/default-thumbnail.jpg',
-            duration: 300, // 5 minutes default
-            createdAt: new Date().toISOString()
-          };
-          
-          // Manually add this to the videos list for UI testing
-          setVideos(prev => [...prev, mockVideoData]);
-          setUploadProgress(100);
-          setUploadStatus('Test mode: Created sample video');
-          message.success('Video created in test mode');
-          
-          // Clear form and file list
-          form.resetFields();
-          setFileList([]);
-        } catch (fallbackError) {
-          addDebug(`Fallback error: ${fallbackError.message}`);
-          message.error('Failed to create test video');
-        }
+        message.error(uploadError.response?.data?.message || 'Failed to upload video');
       }
     } catch (error) {
       addDebug(`Form error: ${error.message}`);

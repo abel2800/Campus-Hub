@@ -1,0 +1,23 @@
+{
+  "development": {
+    "username": "postgres",
+    "password": "YOUR_DB_PASSWORD",
+    "database": "CampusHUb",
+    "host": "127.0.0.1",
+    "dialect": "postgres",
+    "port": 5432
+  },
+  "test": {
+    "dialect": "sqlite",
+    "storage": ":memory:",
+    "logging": false
+  },
+  "production": {
+    "username": "postgres",
+    "password": "YOUR_DB_PASSWORD",
+    "database": "CampusHUb",
+    "host": "127.0.0.1",
+    "dialect": "postgres",
+    "port": 5432
+  }
+}

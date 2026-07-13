@@ -1,0 +1,21 @@
+{
+  "expo": {
+    "name": "Campus Hub",
+    "slug": "campushub",
+    "version": "2.0.0",
+    "orientation": "portrait",
+    "scheme": "campushub",
+    "userInterfaceStyle": "dark",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.campushub.mobile"
+    },
+    "android": {
+      "package": "com.campushub.mobile"
+    },
+    "plugins": ["expo-router"],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

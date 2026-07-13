@@ -23,6 +23,8 @@ import AppLayout from './components/AppLayout';
 import TeacherApp from './components/teacher/TeacherApp';
 import TeacherRegistration from './pages/TeacherRegistration';
 import LoginPage from './components/LoginPage';
+import ForgotPassword from './components/auth/ForgotPassword';
+import ResetPassword from './components/auth/ResetPassword';
 import NotificationsPage from './pages/NotificationsPage';
 import { Spin } from 'antd';
 import './styles/theme.css'; // Import theme styles
@@ -80,7 +82,7 @@ function AppRoutes() {
   const location = useLocation();
   
   // Check if the path is a public route
-  const isPublicRoute = ['/', '/login', '/create-account', '/teacher-registration'].includes(location.pathname);
+  const isPublicRoute = ['/', '/login', '/create-account', '/teacher-registration', '/forgot-password', '/reset-password'].includes(location.pathname);
   
   // Check if it's a teacher-specific route (but not shared functionality like social media)
   const isTeacherRoute = location.pathname.startsWith('/teacher') && 
@@ -90,8 +92,8 @@ function AppRoutes() {
     !location.pathname.includes('/profile');
   
   // Check if it's a shared functionality route
-  const isSharedRoute = ['/social-media', '/friends', '/chat', '/profile'].some(path => 
-    location.pathname.startsWith(path)
+  const isSharedRoute = ['/social-media', '/friends', '/chat', '/profile', '/settings', '/notifications'].some(path => 
+    location.pathname === path || location.pathname.startsWith(path + '/')
   );
   
   // Show loading indicator while checking auth state
@@ -164,6 +166,8 @@ function AppRoutes() {
           <Route path="/chat" element={<Chat />} />
           <Route path="/chat/:userId" element={<Chat />} />
           <Route path="/profile" element={<Profile />} />
+          <Route path="/profile/:userId" element={<Profile />} />
+          <Route path="/settings" element={<Settings />} />
           <Route path="/notifications" element={<NotificationsPage />} />
         </Routes>
       </AppLayout>
@@ -177,6 +181,8 @@ function AppRoutes() {
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/create-account" element={<CreateAccount />} />
           <Route path="/teacher-registration" element={<TeacherRegistration />} />
         </Routes>
@@ -195,6 +201,7 @@ function AppRoutes() {
                 <Route path="/social-media" element={<SocialMediaPage />} />
                 <Route path="/friends" element={<Friends />} />
                 <Route path="/profile" element={<Profile />} />
+                <Route path="/profile/:userId" element={<Profile />} />
                 <Route path="/settings" element={<Settings />} />
                 <Route path="/notifications" element={<NotificationsPage />} />
                 <Route path="/courses" element={<Courses />} />

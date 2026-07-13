@@ -17,9 +17,7 @@ const LoginPage = () => {
       setLoading(true);
       const userWithRole = await login(values);
       
-      // Check if login was successful
       if (userWithRole) {
-        // Set autoLogin flag to true
         localStorage.setItem('autoLogin', 'true');
         
         // Check user role and redirect accordingly
@@ -67,13 +65,12 @@ const LoginPage = () => {
           <Form.Item
             name="email"
             rules={[
-              { required: true, message: 'Please input your email!' },
-              { type: 'email', message: 'Please enter a valid email!' }
+              { required: true, message: 'Please input your email or username!' },
             ]}
           >
             <Input 
               prefix={<UserOutlined />} 
-              placeholder="Email" 
+              placeholder="Email or username" 
               size="large"
             />
           </Form.Item>
@@ -101,14 +98,13 @@ const LoginPage = () => {
             </Button>
           </Form.Item>
 
-          <div style={{ textAlign: 'center', marginTop: 16 }}>
-            <Text>Don't have an account? </Text>
-            <Link to="/register">Register as Student</Link>
+          <div style={{ textAlign: 'right', marginBottom: 8 }}>
+            <Link to="/forgot-password">Forgot password?</Link>
           </div>
-          
-          <div style={{ textAlign: 'center', marginTop: 8 }}>
-            <Text>Are you a teacher? </Text>
-            <Link to="/teacher-registration">Register as Teacher</Link>
+
+          <div style={{ textAlign: 'center', marginTop: 16 }}>
+            <Text>Don&apos;t have an account? </Text>
+            <Link to="/create-account">Create account</Link>
           </div>
         </Form>
       </Card>

@@ -1,227 +1,440 @@
+<div align="center">
+
 # Campus Hub
 
-Campus Hub is an advanced e-learning and social media platform designed to enhance student engagement, course learning, and social interaction within universities.
+### Learn. Connect. Grow — one campus platform.
+
+**E-learning · Social networking · Real-time messaging · Teacher tools**
+
+[![Node.js](https://img.shields.io/badge/Node.js-18%2B-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
+[![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)](https://reactjs.org/)
+[![Expo](https://img.shields.io/badge/Expo-SDK%2054-000020?logo=expo&logoColor=white)](https://expo.dev/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Sequelize-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![Express](https://img.shields.io/badge/Express-4.x-000000?logo=express&logoColor=white)](https://expressjs.com/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+**[Quick start](#-quick-start)** · **[Features](#-features)** · **[Architecture](#-architecture)** · **[Apps](#-apps)** · **[API](#-api-overview)** · **[Changelog](#-recent-updates)**
+
+</div>
+
+---
+
+## Overview
+
+**Campus Hub** is a full-stack university platform that unifies **courses**, **social media**, and **messaging** for students and teachers — available on **web** and **mobile (Expo)**.
+
+| Layer | Stack | Port |
+|-------|--------|------|
+| API | Node.js · Express · Sequelize · Socket.IO | `5000` |
+| Web | React 18 · Ant Design · Axios | `3000` |
+| Mobile | Expo SDK 54 · Expo Router · React Native | `8081` (Expo Go) |
+| Database | PostgreSQL | — |
+
+```text
+┌──────────────────────────────────────────────────────────────────┐
+│                         CAMPUS HUB                               │
+├────────────────────┬────────────────────┬────────────────────────┤
+│   E-Learning       │   Social           │   Real-time            │
+│   Courses · videos │   Posts · stories  │   Chat · notifications │
+│   Progress · grades│   Friends · bios   │   Socket.IO            │
+└────────────────────┴────────────────────┴────────────────────────┘
+         ▲                      ▲                      ▲
+         │                      │                      │
+    Web :3000            Mobile Expo Go           API :5000
+```
+
+---
+
+## Quick start
+
+### Clone
+
+```powershell
+git clone https://github.com/abel2800/Campus-Hub.git
+cd Campus-Hub
+npm run install:all
+```
+
+### Backend env
+
+```powershell
+cd backend
+copy .env.example .env
+# edit .env — set JWT_SECRET and DB_PASSWORD
+
+copy config\config.example.json config\config.json
+# optional if you prefer JSON over .env for Sequelize CLI
+```
+
+Or rely only on `backend/.env` (`DB_*` variables). **Never commit** `.env` or `config.json` with real passwords.
+
+That starts **API + web + Expo** together:
+
+| Service | URL |
+|---------|-----|
+| API | http://localhost:5000 |
+| Web | http://localhost:3000 |
+| Mobile | Scan Expo QR · `exp://YOUR_LAN_IP:8081` |
+
+```powershell
+npm stop          # free ports 3000 / 5000 / 8081
+npm run start:tunnel   # Expo tunnel if Wi‑Fi fails
+```
+
+### First-time database
+
+1. Create a PostgreSQL database (e.g. `campushub`).
+2. Configure `backend/.env` (or `backend/config/config.json`) with your DB credentials and `JWT_SECRET`.
+3. Start the API — models sync on boot (`sequelize.sync`).
+
+OTP codes (registration / password reset) print in the **API terminal**:
+
+```text
+[OTP] purpose=register email=… code=123456
+```
+
+---
 
 ## Features
 
-### 📚 E-Learning
-- **Course Management:** Teachers can create, edit, and manage courses with detailed analytics
-- **Video Content:** Support for video uploads with progress tracking
-- **Student Enrollment:** Self-enrollment system with progress statistics
-- **Grade Management:** Teachers can assign grades and students can track their performance
-- **Progress Tracking:** Real-time tracking of video completion and course progress
+### Auth & roles
 
-### 🏫 Social Media (for Students & Teachers)
-- **User Profiles:** Customizable profiles with avatars and biographical information
-- **Social Posts:** Users can create posts with text, photos, and videos
-- **Story Sharing:** Users can share temporary stories visible for 24 hours
-- **Interactions:** Like, comment, and share functionality for all posts
-- **Friend System:** Add friends and manage connections between students and teachers
-- **Real-time Chat:** Private messaging between all platform users with notification support
+- Unified **Student / Teacher** registration with **OTP verification**
+- Teachers must use a **`@teacher.edu`** email
+- Login with **email or username**
+- JWT sessions · forgot / reset password
 
-### 👨‍🏫 Teacher Features
-- **Dashboard:** Analytics showing student counts, revenue, and overall engagement
-- **Course Creation:** Intuitive interface for creating and organizing course content
-- **Student Management:** View enrolled students and their progress
-- **Performance Metrics:** Track student engagement and success rates
-- **Grade Assignment:** Assign and manage student grades
-- **Teacher Social Networking:** Connect with students through the same social features available to students
-- **View Switching:** Easily switch between teacher dashboard and student view modes
-
-## Role-Based Access
-- **Students:** Access to course enrollment, learning materials, and all social features
-- **Teachers:** Full course management capabilities plus access to the same social networking features as students
-- **Shared Features:** Both students and teachers can use profiles, social media, chat, and friend connections
-- **Dual Interface:** Teachers can access both the teaching dashboard and student experience from the same account
-
-## Technical Architecture
-
-### Frontend
-- **Framework:** React 18 with hooks and context API
-- **UI Library:** Ant Design for responsive components
-- **State Management:** React Context API for global state
-- **Routing:** React Router v6 for navigation
-- **API Integration:** Axios for RESTful API calls
-- **Real-time Features:** Socket.IO for chat and notifications
-
-### Backend
-- **Framework:** Node.js with Express.js
-- **Database:** PostgreSQL with Sequelize ORM
-- **Authentication:** JWT with refresh token mechanism
-- **File Storage:** Local storage for development, AWS S3 for production
-- **API Design:** RESTful API architecture
-- **Middleware:** Custom middleware for auth, validation, and error handling
-
-## Installation
-
-### Prerequisites
-Ensure you have the following installed:
-- [Node.js](https://nodejs.org/) (v14 or higher)
-- [Yarn](https://yarnpkg.com/) (v1.22 or higher) or [npm](https://www.npmjs.com/) (v6 or higher)
-- [PostgreSQL](https://www.postgresql.org/) (v12 or higher)
-- Git
-
-### Environment Setup
-
-#### 1. Clone the repository
-```sh
-git clone https://github.com/abel2800/Campus-Hub.git
-cd Campus-Hub
+```mermaid
+flowchart LR
+  A[Create account] --> B{Role}
+  B -->|Student| C[University email + department]
+  B -->|Teacher| D["@teacher.edu + teaching dept"]
+  C --> E[OTP in API terminal]
+  D --> E
+  E --> F[Verify → JWT session]
+  F -->|student| G[Home / feed]
+  F -->|teacher| H[Teacher dashboard]
 ```
 
-#### 2. Set up the backend
-```sh
-cd backend
+### Social (Instagram-style)
 
-# Install dependencies
-yarn install
-# OR with npm
-npm install
+| Feature | Details |
+|---------|---------|
+| **Feed** | Mutual friends’ posts + your own |
+| **Posts** | Text / images · like · comment |
+| **Stories** | 24h media · view · like |
+| **Friends** | Search · request · accept · mutual graph |
+| **Profiles** | Bio · avatar · IG-style post grid |
+| **Privacy** | Public / private accounts |
+| **Friend list** | Show or hide on profile |
 
-# Create a .env file
-cp .env.example .env
-# If .env.example doesn't exist, create .env with the content below
+```mermaid
+flowchart TB
+  subgraph Public["Public account"]
+    P1[Anyone sees posts]
+  end
+  subgraph Private["Private account"]
+    V[Visitor] --> Bio[Photo + bio only]
+    F[Friend] --> Full[Posts · likes · comments]
+  end
 ```
 
-Edit the `.env` file with your database credentials and other configuration options:
+### E-learning
+
+- Course catalog · enroll · watch videos
+- Progress tracking · grades
+- Teacher: create / edit courses · upload videos · analytics
+
+### Messaging
+
+- Recent chats · 1:1 threads
+- Search users from chat
+- Messaging restricted to **friends**
+
+---
+
+## Architecture
+
+```mermaid
+flowchart TB
+  subgraph Clients
+    WEB["React Web :3000"]
+    MOB["Expo Mobile :8081"]
+  end
+
+  subgraph API["Express API :5000"]
+    R[Routes]
+    M[Auth · Teacher · Upload middleware]
+    C[Controllers]
+    S[Socket.IO]
+    U[Uploads /uploads]
+  end
+
+  DB[(PostgreSQL)]
+
+  WEB -->|REST / Axios| R
+  MOB -->|REST / Axios| R
+  WEB <-->|WS| S
+  MOB <-->|WS| S
+  R --> M --> C --> DB
+  C --> U
 ```
+
+### Auth & social flow
+
+```mermaid
+sequenceDiagram
+  participant U as User
+  participant App as Web / Mobile
+  participant API as Backend
+  participant DB as PostgreSQL
+
+  U->>App: Register (role + email)
+  App->>API: POST /auth/register/.../request
+  API->>DB: Store OTP payload
+  API-->>App: requiresOtp
+  Note over API: OTP logged in terminal
+  U->>App: Enter OTP
+  App->>API: POST .../verify
+  API->>DB: Create User (+ Teacher row)
+  API-->>App: token + user
+  App->>App: Persist session
+```
+
+---
+
+## Apps
+
+### Repository layout
+
+```text
+campushub/
+├── backend/          # Express API, Sequelize, Socket.IO
+├── frontend/         # React web (CRA + Ant Design)
+├── mobile-expo/      # Primary mobile app (Expo Go)
+├── mobile/           # Legacy Flutter client (optional)
+├── scripts/          # npm start / stop orchestration
+├── package.json      # install:all · start · stop
+└── README.md
+```
+
+### Web (`frontend/`)
+
+- Landing · login · unified create-account
+- Student home · courses · social · friends · chat · profile · settings
+- Teacher portal (`/teacher`) · course CRUD · videos · analytics
+- Instagram-style **profile post grid** with like / comment modal
+
+### Mobile (`mobile-expo/`)
+
+- Expo Router tabs: **Home · Feed · Friends · Messages · Profile**
+- Auth: login · register (student/teacher) · OTP · forgot password
+- Social feed · stories · edit profile · avatars
+- Privacy toggles in Settings
+- Campus 2090 dark glass UI theme
+
+### API (`backend/`)
+
+| Area | Prefix |
+|------|--------|
+| Auth | `/api/auth` |
+| Users / privacy / avatar | `/api/users` |
+| Friends | `/api/friends` |
+| Posts | `/api/posts` |
+| Stories | `/api/stories` |
+| Messages | `/api/messages` |
+| Courses | `/api/courses` |
+| Teachers | `/api/teachers` |
+| Notifications | `/api/notifications` |
+
+---
+
+## API overview
+
+### Auth
+
+| Method | Endpoint | Notes |
+|--------|----------|-------|
+| `POST` | `/api/auth/register/request` | Student OTP |
+| `POST` | `/api/auth/register/verify` | Student verify |
+| `POST` | `/api/auth/register/teacher/request` | Teacher OTP (`@teacher.edu`) |
+| `POST` | `/api/auth/register/teacher/verify` | Teacher verify |
+| `POST` | `/api/auth/login` | Email **or** username |
+| `GET` | `/api/auth/me` | Current user |
+| `POST` | `/api/auth/forgot-password` | Reset OTP |
+| `POST` | `/api/auth/reset-password` | Apply new password |
+
+### Social & friends
+
+| Method | Endpoint | Notes |
+|--------|----------|-------|
+| `GET` | `/api/posts/feed` | Mutual friends + self |
+| `POST` | `/api/posts/:id/like` | Toggle like |
+| `POST` | `/api/posts/:id/comment` | Add comment |
+| `GET` | `/api/posts/user/:userId` | Privacy-gated |
+| `GET` | `/api/friends/list` | Mutual friends |
+| `POST` | `/api/friends/request` | `{ receiverId }` |
+| `POST` | `/api/friends/requests/:id/accept` | Accept |
+| `GET` | `/api/friends/search/users?query=` | Search + status |
+| `PUT` | `/api/users/privacy` | Private account · friend list |
+
+### Privacy rules
+
+| Setting | Effect |
+|---------|--------|
+| **Public** | Others can see posts (if friends list allowed) |
+| **Private** | Strangers see **avatar + bio only** |
+| **Show friends list** | Toggle whether others can see your friends |
+
+---
+
+## Database schema (core)
+
+```mermaid
+erDiagram
+  Users ||--o| Teachers : "may be"
+  Users ||--o{ Posts : writes
+  Users ||--o{ FriendRequests : sends
+  Users ||--o{ Friends : connects
+  Users ||--o{ Messages : sends
+  Users ||--o{ Stories : posts
+  Courses ||--o{ CourseVideos : contains
+  Users ||--o{ Enrollments : enrolls
+  Courses ||--o{ Enrollments : has
+  Posts ||--o{ Likes : has
+  Posts ||--o{ Comments : has
+
+  Users {
+    int id PK
+    string username
+    string email
+    string bio
+    string avatar
+    json privacySettings
+  }
+  Teachers {
+    int id PK
+    int userId FK
+    string teacherId
+    string specialization
+  }
+  Posts {
+    int id PK
+    int userId FK
+    string caption
+    string imageUrl
+  }
+```
+
+---
+
+## Environment
+
+### Backend (`backend/.env`)
+
+```env
+PORT=5000
+JWT_SECRET=your-strong-secret
 DB_HOST=localhost
 DB_PORT=5432
 DB_NAME=campushub
 DB_USER=postgres
-DB_PASSWORD=yourpassword
-JWT_SECRET=yoursecretkey
-JWT_EXPIRES_IN=7d
-PORT=5000
+DB_PASSWORD=your-password
 ```
 
-```sh
-# Run database migrations
-yarn migrate
-# OR with npm
-npx sequelize-cli db:migrate
+### Mobile
 
-# Start the backend server
-yarn dev
-# OR with npm
-npm run dev
+Lan IP is resolved automatically for Expo Go. Override if needed:
+
+```env
+EXPO_PUBLIC_API_HOST=192.168.x.x
 ```
 
-#### 3. Set up the frontend
-```sh
-cd ../frontend
+---
 
-# Install dependencies
-yarn install
-# OR with npm
-npm install
+## Scripts
 
-# Create a .env file
-cp .env.example .env
-# If .env.example doesn't exist, create .env with the content below
+| Command | Description |
+|---------|-------------|
+| `npm run install:all` | Install root + backend + frontend + mobile-expo |
+| `npm start` | Start API, web, and Expo together |
+| `npm stop` | Free ports `3000`, `5000`, `8081` |
+| `npm run backend` | API only |
+| `npm run frontend` | Web only |
+| `npm run mobile` | Expo LAN only |
+| `npm run start:tunnel` | Expo tunnel mode |
+
+Backend extras:
+
+```powershell
+cd backend
+npm test
+npm run reset-db
 ```
 
-Edit the `.env` file:
-```
-REACT_APP_API_URL=http://localhost:5000
-```
+---
 
-```sh
-# Start the frontend development server
-yarn start
-# OR with npm
-npm start
-```
+## Recent updates
 
-The frontend will start on `http://localhost:3000`, and the backend will run on `http://localhost:5000`.
+Summary of the latest platform polish (web + mobile + API):
 
-### Required Packages
-If you encounter any missing dependencies, ensure you have these installed:
+### Auth
+- Unified registration with **Student / Teacher** role selector
+- Teacher emails restricted to **`@teacher.edu`**
+- OTP verification for both roles
+- Login accepts **email or username**
+- Mobile login UI centered, keyboard-aware (no “2090” promo chip)
 
-#### Backend Dependencies:
-```sh
-# Core dependencies
-yarn add express sequelize pg pg-hstore bcrypt jsonwebtoken cors dotenv socket.io
-# OR with npm
-npm install express sequelize pg pg-hstore bcrypt jsonwebtoken cors dotenv socket.io
+### Social & profiles
+- Mutual friendship graph on accept (two-way rows)
+- Friends tab in the **mobile navbar**
+- Visit any profile before friending (bio + posts when public)
+- Instagram-style **private accounts**
+- **Show / hide friends list** privacy setting
+- Web profiles use an **IG-style post grid** with like & comment
+- Mobile feed: likes, comments, story viewer + like
+- Profile avatars display correctly after upload
 
-# Dev dependencies
-yarn add -D nodemon sequelize-cli
-# OR with npm
-npm install -D nodemon sequelize-cli
-```
+### Messaging
+- Friends-only messaging
+- User search on the chat screen
+- Friend accept fixed for reliability
 
-#### Frontend Dependencies:
-```sh
-# Core dependencies
-yarn add react react-dom react-router-dom antd @ant-design/icons axios socket.io-client moment
-# OR with npm
-npm install react react-dom react-router-dom antd @ant-design/icons axios socket.io-client moment
-```
+### Quality
+- Repo cleanup: removed dead stubs, unused routers, dual yarn locks, Expo boilerplate
+- Kept active apps: `backend`, `frontend`, `mobile-expo` (+ optional Flutter `mobile/`)
 
-### Cross-Device Compatibility
-The website is designed to be responsive and works on different devices:
-- **Desktop/Laptop:** Full experience with all features
-- **Tablet:** Optimized layout with adapted navigation
-- **Mobile:** Streamlined interface with touch-friendly controls
-
-The responsive design automatically adjusts to your screen size. No additional setup is required for mobile compatibility.
-
-## Database Schema
-
-The system uses the following core models:
-- **Users:** Student and teacher account information
-- **Courses:** Course details and metadata
-- **CourseVideos:** Video content for each course
-- **Enrollments:** Student enrollments in courses
-- **StudentProgress:** Detailed tracking of student progress per video
-- **Posts:** Social media content
-- **Comments:** Interactions on posts
-- **Friends:** User connections
-- **Messages:** Chat communications
-
-## API Documentation
-
-The API follows RESTful principles with the following main endpoints:
-
-### Authentication
-- `POST /api/auth/register` - Create a new user account
-- `POST /api/auth/login` - Authenticate a user
-- `GET /api/auth/profile` - Get the current user's profile
-
-### Courses
-- `GET /api/courses` - List all courses
-- `POST /api/courses` - Create a new course (teacher only)
-- `GET /api/courses/:id` - Get course details
-- `PUT /api/courses/:id` - Update a course (teacher only)
-- `DELETE /api/courses/:id` - Delete a course (teacher only)
-- `POST /api/courses/:id/enroll` - Enroll in a course
-
-### Social
-- `GET /api/posts` - Get social media posts
-- `POST /api/posts` - Create a new post
-- `GET /api/friends` - List user's friends
-- `POST /api/friends/request` - Send a friend request
+---
 
 ## Troubleshooting
 
-### Common Issues
-- **Database Connection:** Ensure PostgreSQL is running and credentials are correct
-- **Missing Tables:** Run the migrations to create all required database tables
-- **CORS Errors:** Make sure backend and frontend URLs are configured correctly
-- **Mobile Display Issues:** If encountering display problems on mobile, clear browser cache
-- **Video Playback:** Ensure proper codecs are installed for video playback
-
-## Contributing
-Contributions are welcome! Follow these steps:
-1. Fork the repository
-2. Create a new branch: `git checkout -b feature-name`
-3. Commit changes: `git commit -m 'Add feature'`
-4. Push to the branch: `git push origin feature-name`
-5. Create a Pull Request
-
-## License
-This project is licensed under the MIT License.
+| Issue | Fix |
+|-------|-----|
+| Web proxy / `ECONNREFUSED :5000` | API crashed or not running — check `[API]` logs, restart `npm start` |
+| Mobile can’t reach API | Same Wi‑Fi · allow Local Network · or `npm run start:tunnel` |
+| Android USB | `adb reverse tcp:8081 tcp:8081` and `adb reverse tcp:5000 tcp:5000` → `exp://127.0.0.1:8081` |
+| OTP missing | Watch the API terminal for `[OTP] … code=` |
+| Teacher blocked from dashboard | Finish teacher OTP registration so a `Teachers` row exists |
 
 ---
-Developed by **Abel Sirak Kebede** 🚀
+
+## Contributing
+
+1. Fork / branch from `main`
+2. Keep API, web, and mobile behavior aligned when touching shared flows
+3. Prefer real API data over mocks
+4. Open a PR with a short summary and test notes
+
+---
+
+## License
+
+MIT © Campus Hub contributors
+
+---
+
+<div align="center">
+
+**Campus Hub** — one platform for courses, friends, and campus life.
+
+</div>

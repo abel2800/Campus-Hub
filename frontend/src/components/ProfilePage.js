@@ -65,50 +65,98 @@ const ProfilePage = () => {
   const [profileUser, setProfileUser] = useState(null);
   const [isOwnProfile, setIsOwnProfile] = useState(true);
   const [isTeacher, setIsTeacher] = useState(false);
+  const [canViewPosts, setCanViewPosts] = useState(true);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [selectedPost, setSelectedPost] = useState(null);
+  const [commentText, setCommentText] = useState('');
 
   useEffect(() => {
     console.log('ProfilePage mounted - User:', user?.username, 'Role:', user?.role);
     
-    // Check if the user is a teacher
     setIsTeacher(user && user.role === 'teacher');
     
     if (!user) {
       navigate('/login');
     } else {
-      // Check if viewing own profile or someone else's
-      const viewingUserId = userId || user.id;
-      setIsOwnProfile(viewingUserId === user.id.toString() || !userId);
+      const viewingUserId = userId ? String(userId) : String(user.id);
+      const own = viewingUserId === String(user.id);
+      setIsOwnProfile(own);
       
-      if (viewingUserId !== user.id.toString() && userId) {
-        // Load other user's profile
+      if (!own) {
         loadOtherUserProfile(viewingUserId);
       } else {
-        // Load own profile
         setProfileUser(user);
-    loadUserData();
-        fetchUserStats();
+        setCanViewPosts(true);
+        loadUserData(user.id);
+        fetchUserStats(user.id);
       }
     }
   }, [userId, user]);
 
-  const loadOtherUserProfile = async (userId) => {
+  const loadOtherUserProfile = async (targetId) => {
     try {
       setLoading(true);
-      const response = await api.get(`/api/users/${userId}`);
+      const response = await api.get(`/api/users/${targetId}`);
       setProfileUser(response.data);
-      
-      // Load other user's data
-      loadUserData(userId);
-      fetchUserStats(userId);
+      setCanViewPosts(response.data.canViewPosts !== false);
+
+      if (response.data.canViewPosts) {
+        loadUserData(targetId, response.data);
+      } else {
+        setPosts([]);
+        setCourses([]);
+        setFriends([]);
+        setStats({
+          posts: 0,
+          courses: 0,
+          friends: response.data.friendsCount || 0,
+        });
+        setLoading(false);
+      }
+      fetchUserStats(targetId);
     } catch (error) {
       console.error('Error loading user profile:', error);
       setError('Failed to load user profile');
-    } finally {
       setLoading(false);
     }
   };
 
-  const loadUserData = async (targetUserId) => {
+  const refreshOtherProfile = async () => {
+    if (userId) await loadOtherUserProfile(userId);
+  };
+
+  const handleSendFriendRequest = async () => {
+    try {
+      setActionLoading(true);
+      await api.post('/api/friends/request', { receiverId: Number(userId) });
+      message.success('Friend request sent!');
+      await refreshOtherProfile();
+    } catch (err) {
+      message.error(err.response?.data?.message || 'Failed to send friend request');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleAcceptFriendRequest = async () => {
+    try {
+      setActionLoading(true);
+      const requestId = profileUser?.requestId;
+      if (!requestId) {
+        message.error('No pending request found');
+        return;
+      }
+      await api.post(`/api/friends/requests/${requestId}/accept`);
+      message.success('Friend request accepted!');
+      await refreshOtherProfile();
+    } catch (err) {
+      message.error(err.response?.data?.message || 'Failed to accept request');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const loadUserData = async (targetUserId, profileData) => {
     const userId = targetUserId || user?.id;
     if (!userId) return;
     
@@ -116,29 +164,26 @@ const ProfilePage = () => {
       setLoading(true);
       setError(null);
       
-      // Use try/catch for each request to handle individual failures
       try {
         const postsRes = await api.get(`/api/posts/user/${userId}`);
-        setPosts(postsRes.data || []);
+        setPosts(Array.isArray(postsRes.data) ? postsRes.data : []);
       } catch (err) {
         console.error('Error loading posts:', err);
         setPosts([]);
       }
       
       try {
-        // If viewing own profile, get appropriate courses based on role
-        if (isOwnProfile) {
-          if (isTeacher) {
-            // For teachers, fetch courses they've created
+        if (isOwnProfile || profileData?.canViewCourses !== false) {
+          if (isOwnProfile && isTeacher) {
             const coursesRes = await api.get('/api/courses/teacher');
             setCourses(coursesRes.data || []);
-          } else {
-            // For students, get enrolled courses
+          } else if (isOwnProfile) {
             const coursesRes = await api.get('/api/courses/user/enrolled');
             setCourses(coursesRes.data || []);
+          } else {
+            setCourses([]);
           }
         } else {
-          // For other users, this might be different or not available
           setCourses([]);
         }
       } catch (err) {
@@ -147,9 +192,14 @@ const ProfilePage = () => {
       }
       
       try {
-        // Use the correct endpoint for friends
-        const friendsRes = await api.get('/api/friends/list');
-        setFriends(friendsRes.data || []);
+        if (profileData?.friends) {
+          setFriends(profileData.friends.map((f) => ({ friend: f, id: f.id })));
+        } else if (isOwnProfile) {
+          const friendsRes = await api.get('/api/friends/list');
+          setFriends(friendsRes.data || []);
+        } else {
+          setFriends([]);
+        }
       } catch (err) {
         console.error('Error loading friends:', err);
         setFriends([]);
@@ -297,9 +347,7 @@ const ProfilePage = () => {
     if (!isOwnProfile) return;
     
     try {
-      const response = await api.put('/api/users/profile', values, {
-        headers: { Authorization: `Bearer ${user.token}` }
-      });
+      const response = await api.put('/api/users/profile', values);
       updateUser(response.data);
       message.success('Profile updated successfully');
       setEditModalVisible(false);
@@ -311,22 +359,27 @@ const ProfilePage = () => {
 
   const displayedUser = profileUser || user;
 
-  // Update the getImageUrl function to correctly handle course thumbnails
   const getImageUrl = (imageUrl) => {
-    if (!imageUrl) return 'https://via.placeholder.com/300x200?text=Course+Image';
+    if (!imageUrl) return 'https://via.placeholder.com/300x200?text=No+Image';
     
-    // For URLs that start with http, use as is
     if (imageUrl.startsWith('http')) {
       return imageUrl;
     }
     
-    // Handle paths that start with /uploads
-    if (imageUrl.startsWith('/uploads')) {
+    if (imageUrl.startsWith('/')) {
       return `${process.env.REACT_APP_API_URL || 'http://localhost:5000'}${imageUrl}`;
     }
     
-    // Default thumbnail for courses
     return `${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/uploads/courses/thumbnails/default-thumbnail.jpg`;
+  };
+
+  const getAvatarUrl = (imageUrl) => {
+    if (!imageUrl) return undefined;
+    if (imageUrl.startsWith('http')) return imageUrl;
+    if (imageUrl.startsWith('/')) {
+      return `${process.env.REACT_APP_API_URL || 'http://localhost:5000'}${imageUrl}`;
+    }
+    return undefined;
   };
 
   // Update the Statistic component to handle different data types
@@ -384,7 +437,7 @@ const ProfilePage = () => {
             <div style={{ position: 'relative', display: 'inline-block' }}>
               <Avatar 
                 size={120} 
-                src={displayedUser.avatar} 
+                src={getAvatarUrl(displayedUser.avatar || displayedUser.avatarUrl)} 
                 icon={<UserOutlined />} 
               />
               {isOwnProfile && (
@@ -441,25 +494,38 @@ const ProfilePage = () => {
                   </>
                 ) : (
                   <>
-                    <Button 
-                      type="primary" 
-                      icon={<MessageOutlined />} 
-                      onClick={() => navigate(`/chat/${displayedUser.id}`)}
-                    >
-                      Message
-                    </Button>
-                    {!displayedUser.isFriend ? (
+                    {(profileUser?.friendshipStatus === 'accepted' || profileUser?.isFriend) && (
+                      <Button 
+                        type="primary" 
+                        icon={<MessageOutlined />} 
+                        onClick={() => navigate(`/chat/${displayedUser.id}`)}
+                      >
+                        Message
+                      </Button>
+                    )}
+                    {profileUser?.friendshipStatus === 'incoming' && (
+                      <Button
+                        type="primary"
+                        loading={actionLoading}
+                        icon={<UserAddOutlined />}
+                        onClick={handleAcceptFriendRequest}
+                      >
+                        Accept Request
+                      </Button>
+                    )}
+                    {profileUser?.friendshipStatus === 'pending' && (
+                      <Button disabled>Request Sent</Button>
+                    )}
+                    {(profileUser?.friendshipStatus === 'none' || (!profileUser?.friendshipStatus && !profileUser?.isFriend)) && (
                       <Button 
                         icon={<UserAddOutlined />}
-                        onClick={() => {
-                          api.post('/api/friends/request', { receiverId: displayedUser.id })
-                            .then(() => message.success('Friend request sent!'))
-                            .catch(err => message.error('Failed to send friend request'));
-                        }}
+                        loading={actionLoading}
+                        onClick={handleSendFriendRequest}
                       >
                         Add Friend
                       </Button>
-                    ) : (
+                    )}
+                    {(profileUser?.friendshipStatus === 'accepted' || profileUser?.isFriend) && (
                       <Button 
                         danger
                         icon={<UserOutlined />}
@@ -467,13 +533,12 @@ const ProfilePage = () => {
                           api.delete(`/api/friends/${displayedUser.id}`)
                             .then(() => {
                               message.success('Friend removed');
-                              // Refresh the page
-                              window.location.reload();
+                              refreshOtherProfile();
                             })
-                            .catch(err => message.error('Failed to remove friend'));
+                            .catch(() => message.error('Failed to remove friend'));
                         }}
                       >
-                        Remove Friend
+                        Unfriend
                       </Button>
                     )}
                   </>
@@ -546,41 +611,171 @@ const ProfilePage = () => {
             <div style={{ textAlign: 'center', padding: '20px 0' }}>
               <Spin />
             </div>
+          ) : !canViewPosts ? (
+            <Empty description="This account is private. Become friends to see their posts." />
           ) : posts.length === 0 ? (
             <Empty description="No posts yet" />
           ) : (
-            <List
-              itemLayout="vertical"
-              dataSource={posts}
-              renderItem={post => (
-                <List.Item
-                  key={post.id}
-                  actions={[
-                    <Button type="link" key="like" size="small">Like</Button>,
-                    <Button type="link" key="comment" size="small">Comment</Button>,
-                    <Button type="link" key="share" size="small">Share</Button>
-                  ]}
-                  extra={
-                    post.image && (
-                      <Image
-                        width={272}
-                        alt="post image"
-                        src={post.image}
-                        fallback="https://via.placeholder.com/272x150?text=Post+Image"
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(3, 1fr)',
+                gap: 4,
+              }}
+            >
+              {posts.map((post) => {
+                const src = getImageUrl(post.imageUrl || post.mediaUrl || post.image);
+                const hasMedia = !!(post.imageUrl || post.mediaUrl || post.image);
+                return (
+                  <div
+                    key={post.id}
+                    onClick={() => setSelectedPost(post)}
+                    style={{
+                      aspectRatio: '1 / 1',
+                      background: '#111',
+                      cursor: 'pointer',
+                      overflow: 'hidden',
+                      position: 'relative',
+                    }}
+                  >
+                    {hasMedia ? (
+                      <img
+                        src={src}
+                        alt=""
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                       />
-                    )
-                  }
-                >
-                  <List.Item.Meta
-                    avatar={<Avatar src={displayedUser.avatar} icon={<UserOutlined />} />}
-                    title={<a href={`/posts/${post.id}`}>{post.title || 'Untitled Post'}</a>}
-                    description={new Date(post.createdAt).toLocaleString()}
-                  />
-                  {post.content}
-                </List.Item>
-              )}
-            />
+                    ) : (
+                      <div
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          padding: 12,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          background: 'linear-gradient(135deg,#e6f4ff,#f0f5ff)',
+                          color: '#1677ff',
+                          fontSize: 13,
+                          textAlign: 'center',
+                        }}
+                      >
+                        {(post.caption || post.content || 'Post').slice(0, 80)}
+                      </div>
+                    )}
+                    <div
+                      style={{
+                        position: 'absolute',
+                        bottom: 6,
+                        left: 8,
+                        color: '#fff',
+                        fontSize: 12,
+                        textShadow: '0 1px 2px rgba(0,0,0,.6)',
+                      }}
+                    >
+                      ♥ {post.likesCount || 0} · 💬 {post.commentsCount || post.comments?.length || 0}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           )}
+
+          <Modal
+            open={!!selectedPost}
+            onCancel={() => {
+              setSelectedPost(null);
+              setCommentText('');
+            }}
+            footer={null}
+            width={720}
+            title={displayedUser?.username}
+          >
+            {selectedPost && (
+              <div>
+                {(selectedPost.imageUrl || selectedPost.mediaUrl || selectedPost.image) && (
+                  <Image
+                    src={getImageUrl(selectedPost.imageUrl || selectedPost.mediaUrl || selectedPost.image)}
+                    style={{ width: '100%', maxHeight: 420, objectFit: 'contain', marginBottom: 12 }}
+                  />
+                )}
+                <Paragraph>{selectedPost.caption || selectedPost.content || ''}</Paragraph>
+                <Text type="secondary">{new Date(selectedPost.createdAt).toLocaleString()}</Text>
+                <Space style={{ marginTop: 12, width: '100%' }}>
+                  <Button
+                    type={selectedPost.isLiked ? 'primary' : 'default'}
+                    onClick={async () => {
+                      try {
+                        await api.post(`/api/posts/${selectedPost.id}/like`);
+                        const res = await api.get(`/api/posts/user/${displayedUser.id}`);
+                        const next = Array.isArray(res.data) ? res.data : [];
+                        setPosts(next);
+                        setSelectedPost(next.find((p) => p.id === selectedPost.id) || selectedPost);
+                      } catch {
+                        message.error('Could not like post');
+                      }
+                    }}
+                  >
+                    {selectedPost.isLiked ? 'Liked' : 'Like'} ({selectedPost.likesCount || 0})
+                  </Button>
+                </Space>
+                <Divider />
+                <div style={{ maxHeight: 160, overflowY: 'auto', marginBottom: 12 }}>
+                  {(selectedPost.comments || []).length === 0 ? (
+                    <Text type="secondary">No comments yet</Text>
+                  ) : (
+                    (selectedPost.comments || []).map((c) => (
+                      <div key={c.id} style={{ marginBottom: 8 }}>
+                        <Text strong>{c.user?.username || 'user'} </Text>
+                        <Text>{c.content}</Text>
+                      </div>
+                    ))
+                  )}
+                </div>
+                <Space.Compact style={{ width: '100%' }}>
+                  <Input
+                    placeholder="Add a comment…"
+                    value={commentText}
+                    onChange={(e) => setCommentText(e.target.value)}
+                    onPressEnter={async () => {
+                      if (!commentText.trim()) return;
+                      try {
+                        await api.post(`/api/posts/${selectedPost.id}/comment`, {
+                          content: commentText.trim(),
+                        });
+                        setCommentText('');
+                        const res = await api.get(`/api/posts/user/${displayedUser.id}`);
+                        const next = Array.isArray(res.data) ? res.data : [];
+                        setPosts(next);
+                        setSelectedPost(next.find((p) => p.id === selectedPost.id) || selectedPost);
+                      } catch {
+                        message.error('Could not comment');
+                      }
+                    }}
+                  />
+                  <Button
+                    type="primary"
+                    onClick={async () => {
+                      if (!commentText.trim()) return;
+                      try {
+                        await api.post(`/api/posts/${selectedPost.id}/comment`, {
+                          content: commentText.trim(),
+                        });
+                        setCommentText('');
+                        const res = await api.get(`/api/posts/user/${displayedUser.id}`);
+                        const next = Array.isArray(res.data) ? res.data : [];
+                        setPosts(next);
+                        setSelectedPost(next.find((p) => p.id === selectedPost.id) || selectedPost);
+                      } catch {
+                        message.error('Could not comment');
+                      }
+                    }}
+                  >
+                    Post
+                  </Button>
+                </Space.Compact>
+              </div>
+            )}
+          </Modal>
           </TabPane>
           
           {/* Course tab for all users */}

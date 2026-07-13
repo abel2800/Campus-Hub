@@ -631,19 +631,8 @@ const LandingPage = () => {
                     type="default" 
                     block 
                     onClick={() => navigate('/create-account')}
-                    style={{ marginBottom: '16px' }}
                   >
-                  Create Student Account
-                  </FloatingButton>
-              </div>
-              
-              <div style={{ textAlign: 'center' }}>
-                  <FloatingButton 
-                    type="default" 
-                    block 
-                    onClick={() => navigate('/teacher-registration')}
-                  >
-                  Register as a Teacher
+                  Create account
                   </FloatingButton>
               </div>
             </Form>

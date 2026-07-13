@@ -18,20 +18,8 @@ router.get('/profile', teacherController.getProfile);
 router.get('/stats', teacherController.getStats);
 router.get('/analytics', teacherController.getAnalytics);
 
-// Add a direct dashboard stats endpoint that always works
-router.get('/dashboard/stats', (req, res) => {
-  console.log('Providing mock dashboard stats');
-  // Return fixed mock data that doesn't depend on database
-  res.json({
-    totalStudents: 124,
-    totalCourses: 7,
-    totalRevenue: 3280,
-    averageRating: 4.7,
-    studentIncrease: 12,
-    revenueIncrease: 8,
-    activeStudents: 98
-  });
-});
+// Add a direct dashboard stats endpoint
+router.get('/dashboard/stats', teacherController.getStats);
 
 // Course management routes
 router.get('/courses', teacherController.getCourses);
@@ -149,24 +137,9 @@ router.post('/courses/:courseId/videos', upload.single('video'), async (req, res
       
     } catch (dbError) {
       console.error('[VIDEO UPLOAD] Database error:', dbError);
-      
-      // Return success with mock data for testing purposes
-      const mockVideo = {
-        id: Date.now(),
-        title: req.body.title || 'Untitled Video',
-        description: req.body.description || '',
-        videoUrl: `/uploads/courses/videos/${req.file.filename}`,
-        thumbnail: '/uploads/courses/thumbnails/default-thumbnail.jpg',
-        duration: 0,
-        order: req.body.order || 1,
-        createdAt: new Date()
-      };
-      
-      console.log('[VIDEO UPLOAD] Created mock video due to DB error:', mockVideo);
-      
-      return res.status(201).json({
-        message: 'Video created in test mode (DB error)',
-        video: mockVideo
+      return res.status(500).json({
+        message: 'Failed to save video',
+        error: dbError.message,
       });
     }
     
@@ -183,38 +156,19 @@ router.post('/courses/:courseId/videos', upload.single('video'), async (req, res
 router.get('/courses/:courseId/videos', async (req, res) => {
   try {
     const { courseId } = req.params;
-    console.log(`[FETCH VIDEOS] Request for course ${courseId}`);
-    
-    // For testing purposes - return mock data
-    const mockVideos = [
-      {
-        id: 1,
-        title: 'Introduction to the Course',
-        description: 'An overview of what to expect in this course',
-        videoUrl: '/uploads/courses/videos/sample-video-1.mp4',
-        thumbnail: '/uploads/courses/thumbnails/default-thumbnail.jpg',
-        duration: 350,
-        createdAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
-      },
-      {
-        id: 2,
-        title: 'First Lesson - Getting Started',
-        description: 'Learning the basic concepts',
-        videoUrl: '/uploads/courses/videos/sample-video-2.mp4',
-        thumbnail: '/uploads/courses/thumbnails/default-thumbnail.jpg',
-        duration: 450,
-        createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString()
-      }
-    ];
-    
-    console.log(`[FETCH VIDEOS] Returning ${mockVideos.length} mock videos`);
-    return res.status(200).json(mockVideos);
-    
+    const { CourseVideo } = require('../models');
+
+    const videos = await CourseVideo.findAll({
+      where: { courseId },
+      order: [['order', 'ASC'], ['createdAt', 'ASC']],
+    });
+
+    return res.status(200).json(videos);
   } catch (error) {
     console.error('[FETCH VIDEOS] Error:', error);
-    return res.status(500).json({ 
+    return res.status(500).json({
       message: 'Failed to fetch course videos',
-      error: error.message
+      error: error.message,
     });
   }
 });

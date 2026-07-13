@@ -91,17 +91,38 @@ const Settings = () => {
   const onFinishProfile = async (values) => {
     try {
       setLoading(true);
-      const response = await axios.put('/api/users/update', values);
+      const response = await axios.put('/api/users/profile', {
+        username: values.username,
+        department: values.department,
+        bio: values.bio,
+      });
       message.success('Profile updated successfully');
       
-      // Update local storage with new user data
       localStorage.setItem('user', JSON.stringify({
         ...user,
-        ...values
+        ...response.data,
       }));
     } catch (error) {
       console.error('Failed to update profile:', error);
-      message.error('Failed to update profile');
+      message.error(error.response?.data?.message || 'Failed to update profile');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onFinishPrivacy = async (values) => {
+    try {
+      setLoading(true);
+      await axios.put('/api/users/privacy', {
+        profileVisibility: values.profileVisibility,
+        searchable: values.searchable,
+        showCourses: values.showCourses,
+        showFriendsList: values.showFriendsList,
+      });
+      message.success('Privacy settings saved');
+    } catch (error) {
+      console.error('Failed to save privacy:', error);
+      message.error(error.response?.data?.message || 'Failed to save privacy settings');
     } finally {
       setLoading(false);
     }
@@ -157,7 +178,7 @@ const Settings = () => {
         // Update local storage with new avatar path
         localStorage.setItem('user', JSON.stringify({
           ...user,
-          avatar: response.data.avatarPath
+          avatar: response.data.avatarUrl || response.data.avatar
         }));
         
         message.success('Avatar updated successfully');
@@ -425,16 +446,34 @@ const Settings = () => {
             key="privacy"
           >
             <StyledCard title="Privacy Settings">
-              <Form layout="vertical">
+              <Form
+                layout="vertical"
+                onFinish={onFinishPrivacy}
+                initialValues={{
+                  profileVisibility: user?.privacySettings?.profileVisibility || 'public',
+                  searchable: user?.privacySettings?.searchable !== false,
+                  showCourses: user?.privacySettings?.showCourses !== false,
+                  showFriendsList: user?.privacySettings?.showFriendsList !== false,
+                }}
+              >
                 <Form.Item
                   name="profileVisibility"
-                  label="Profile Visibility"
+                  label="Post visibility"
+                  extra="Private accounts (Instagram-style): only friends see your posts, courses, and friend list. Strangers see photo + bio only."
                 >
-                  <Select defaultValue="friends" style={{ width: '100%' }}>
-                    <Option value="public">Public - Everyone can see your profile</Option>
-                    <Option value="friends">Friends - Only friends can see your full profile</Option>
-                    <Option value="private">Private - Only you can see your profile</Option>
+                  <Select style={{ width: '100%' }}>
+                    <Option value="public">Public — Anyone can see your posts</Option>
+                    <Option value="private">Private — Only friends can see your posts</Option>
                   </Select>
+                </Form.Item>
+
+                <Form.Item
+                  name="showFriendsList"
+                  label="Show friends list on profile"
+                  valuePropName="checked"
+                  extra="Turn off to hide your friends list from others."
+                >
+                  <Switch />
                 </Form.Item>
 
                 <Form.Item
@@ -442,7 +481,7 @@ const Settings = () => {
                   label="Appear in Search Results"
                   valuePropName="checked"
                 >
-                  <Switch defaultChecked />
+                  <Switch />
                 </Form.Item>
 
                 <Form.Item
@@ -450,13 +489,14 @@ const Settings = () => {
                   label="Show Enrolled Courses"
                   valuePropName="checked"
                 >
-                  <Switch defaultChecked />
+                  <Switch />
                 </Form.Item>
 
                 <Form.Item>
                   <Button 
                     type="primary" 
                     htmlType="submit" 
+                    loading={loading}
                     block
                   >
                     Save Privacy Settings

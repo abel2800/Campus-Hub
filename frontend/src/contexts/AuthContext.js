@@ -82,6 +82,21 @@ export function AuthProvider({ children }) {
     loadUserFromStorage();
   }, []);
 
+  const setSession = (token, userData) => {
+    const userWithRole = {
+      ...userData,
+      role: userData.role || (userData.username?.toLowerCase().includes('teacher') ? 'teacher' : 'student'),
+    };
+
+    localStorage.setItem('user', JSON.stringify(userWithRole));
+    localStorage.setItem('token', token);
+    localStorage.setItem('autoLogin', 'true');
+    axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+    setUser(userWithRole);
+    setIsAuthenticated(true);
+    return userWithRole;
+  };
+
   const login = async (credentials) => {
     try {
       setLoading(true);
@@ -99,20 +114,16 @@ export function AuthProvider({ children }) {
       if (!token) {
         throw new Error('No token received from server');
       }
-      
-      // Check if the user is a teacher by username - temporary solution until backend adds roles
-      // This is a workaround because the backend doesn't provide role information
-      const isTeacherUser = userData.username && userData.username.toLowerCase().includes('teacher');
-      
-      // Add role information to user data
+
       const userWithRole = {
         ...userData,
-        role: isTeacherUser ? 'teacher' : 'student'
+        role: userData.role || (userData.username?.toLowerCase().includes('teacher') ? 'teacher' : 'student'),
       };
       
       // Store user data and token in localStorage
       localStorage.setItem('user', JSON.stringify(userWithRole));
       localStorage.setItem('token', token);
+      localStorage.setItem('autoLogin', 'true');
       
       // Set user in state
       setUser(userWithRole);
@@ -179,6 +190,7 @@ export function AuthProvider({ children }) {
     loading,
     error,
     login,
+    setSession,
     logout,
     updateUser,
     isAuthenticated,

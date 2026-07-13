@@ -47,63 +47,80 @@ const searchUsers = async (req, res) => {
       return res.json([]);
     }
 
-    // Find users matching the search query
     const users = await User.findAll({
       where: {
         [Op.and]: [
-          {
-            username: {
-              [Op.iLike]: `%${query}%`
-            }
+          { username: { [Op.iLike]: `%${query}%` } },
+          { id: { [Op.ne]: currentUserId } },
+        ],
+      },
+      attributes: ['id', 'username', 'department', 'avatar', 'avatarUrl', 'bio'],
+      limit: 20,
+    });
+
+    const userIds = users.map((u) => u.id);
+
+    const sentRequests = userIds.length
+      ? await FriendRequest.findAll({
+          where: {
+            senderId: currentUserId,
+            receiverId: { [Op.in]: userIds },
+            status: 'pending',
           },
-          {
-            id: {
-              [Op.ne]: currentUserId
-            }
-          }
-        ]
-      },
-      attributes: ['id', 'username', 'department']
-    });
+          raw: true,
+        })
+      : [];
 
-    // Get only friend requests sent by the current user
-    const sentRequests = await FriendRequest.findAll({
-      where: {
-        senderId: currentUserId,
-        receiverId: users.map(u => u.id),
-        status: 'pending'
-      },
-      raw: true
-    });
-
-    // Get existing friendships
-    const friendships = await Friend.findAll({
-      where: {
-        [Op.or]: [
-          {
-            userId: currentUserId,
-            friendId: users.map(u => u.id)
+    const incomingRequests = userIds.length
+      ? await FriendRequest.findAll({
+          where: {
+            receiverId: currentUserId,
+            senderId: { [Op.in]: userIds },
+            status: 'pending',
           },
-          {
-            userId: users.map(u => u.id),
-            friendId: currentUserId
-          }
-        ]
-      },
-      raw: true
-    });
+          raw: true,
+        })
+      : [];
 
-    // Format users with request and friendship status
-    const formattedUsers = users.map(user => ({
-      id: user.id,
-      username: user.username,
-      department: user.department,
-      requestSent: sentRequests.some(fr => fr.receiverId === user.id),
-      isFriend: friendships.some(f => 
-        (f.userId === currentUserId && f.friendId === user.id) ||
-        (f.userId === user.id && f.friendId === currentUserId)
-      )
-    }));
+    const friendships = userIds.length
+      ? await Friend.findAll({
+          where: {
+            [Op.or]: [
+              { userId: currentUserId, friendId: { [Op.in]: userIds } },
+              { userId: { [Op.in]: userIds }, friendId: currentUserId },
+            ],
+          },
+          raw: true,
+        })
+      : [];
+
+    const formattedUsers = users.map((user) => {
+      const incoming = incomingRequests.find((fr) => fr.senderId === user.id);
+      const sent = sentRequests.find((fr) => fr.receiverId === user.id);
+      const isFriend = friendships.some(
+        (f) =>
+          (f.userId === currentUserId && f.friendId === user.id) ||
+          (f.userId === user.id && f.friendId === currentUserId),
+      );
+
+      let friendshipStatus = 'none';
+      if (isFriend) friendshipStatus = 'accepted';
+      else if (incoming) friendshipStatus = 'incoming';
+      else if (sent) friendshipStatus = 'pending';
+
+      return {
+        id: user.id,
+        username: user.username,
+        department: user.department,
+        avatar: user.avatar,
+        avatarUrl: user.avatarUrl,
+        bio: user.bio,
+        requestSent: Boolean(sent),
+        isFriend,
+        friendshipStatus,
+        requestId: incoming?.id,
+      };
+    });
 
     console.log('Formatted users:', formattedUsers);
     res.json(formattedUsers);

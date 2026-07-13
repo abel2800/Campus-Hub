@@ -3,6 +3,7 @@ const router = express.Router();
 const { Course, Enrollment, CourseVideo, User, Notification, StudentProgress } = require('../models');
 const courseController = require('../controllers/courseController');
 const authMiddleware = require('../middleware/authMiddleware');
+const isTeacher = require('../middleware/teacherMiddleware');
 const sequelize = require('../config/database');
 
 // IMPORTANT: Order matters for routes with parameters
@@ -141,8 +142,8 @@ router.get('/:id', courseController.getCourseById);
 // Enroll in a course
 router.post('/:id/enroll', authMiddleware, courseController.enrollInCourse);
 
-// Create a new course with file upload
-router.post('/', courseController.uploadMiddleware, courseController.createCourse);
+// Create a new course — teachers only
+router.post('/', authMiddleware, isTeacher, courseController.uploadMiddleware, courseController.createCourse);
 
 // Update a course
 router.put('/:id', courseController.uploadMiddleware, courseController.updateCourse);
@@ -500,7 +501,7 @@ router.put('/:id/progress', authMiddleware, async (req, res) => {
       where: { userId, courseId },
       include: [{
         model: Course,
-        as: 'Course',
+        as: 'course',
         attributes: ['title', 'totalVideos', 'totalDuration']
       }]
     });
@@ -510,7 +511,7 @@ router.put('/:id/progress', authMiddleware, async (req, res) => {
       progress: updatedEnrollment.progress,
       status: updatedEnrollment.status,
       lastActivity: updatedEnrollment.updatedAt,
-      course: updatedEnrollment.Course,
+      course: updatedEnrollment.course,
       grade: Math.floor(updatedEnrollment.progress) // Grade based on progress percentage
     });
   } catch (error) {

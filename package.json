@@ -1,0 +1,20 @@
+{
+  "name": "campushub",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Campus Hub — backend, web, and mobile (iOS + Android) in one command",
+  "scripts": {
+    "install:all": "npm install && npm install --prefix backend && npm install --prefix frontend --legacy-peer-deps && npm install --prefix mobile-expo",
+    "start": "node scripts/start.js",
+    "stop": "node scripts/free-ports.js",
+    "dev": "npm start",
+    "start:tunnel": "node scripts/start.js --tunnel",
+    "backend": "npm run dev --prefix backend",
+    "frontend": "npm start --prefix frontend",
+    "mobile": "npm run start:lan --prefix mobile-expo",
+    "mobile:tunnel": "npm run start:tunnel --prefix mobile-expo"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

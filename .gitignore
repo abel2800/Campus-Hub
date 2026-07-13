@@ -1,23 +1,55 @@
-# Ignore node_modules in both frontend and backend
-frontend/node_modules/
-backend/node_modules/
+# Dependencies
+node_modules/
+**/node_modules/
 
-# Ignore environment files
+# Environment & secrets
 .env
+.env.*
+!.env.example
+**/.env
+!**/.env.example
+backend/.env
+frontend/.env
+mobile-expo/.env
 
-# Ignore build and distribution folders
+# Local DB config with credentials (use config.example.json)
+backend/config/config.json
+
+# Builds & caches
 dist/
 build/
-
-# Ignore system files
-.DS_Store
-
-# Ignore log files
+.cache/
 *.log
-# Ignore the uploads folder in the backend
-backend/uploads/
+npm-debug.log*
+yarn-error.log*
+.eslintcache
 
-# Ignore the uploads folder in the frontend
+# Uploads (user-generated media — do not publish)
+backend/uploads/
+backend/public/uploads/**
+!backend/public/uploads/.gitkeep
+!backend/public/uploads/avatars/.gitkeep
+!backend/public/uploads/stories/.gitkeep
+!backend/public/uploads/posts/.gitkeep
 frontend/uploads/
 
-.qodo
+# Expo / mobile
+mobile-expo/.expo/
+mobile-expo/dist/
+mobile/.dart_tool/
+mobile/.flutter-plugins
+mobile/.flutter-plugins-dependencies
+mobile/build/
+mobile/.idea/
+**/*.iml
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.qodo/
+.vscode/
+!.vscode/extensions.json
+.idea/
+
+*.bak
+backend/config/config.json.bak
