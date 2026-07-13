@@ -36,6 +36,7 @@ frontend/uploads/
 # Expo / mobile
 mobile-expo/.expo/
 mobile-expo/dist/
+mobile/android/local.properties
 mobile/.dart_tool/
 mobile/.flutter-plugins
 mobile/.flutter-plugins-dependencies
