@@ -38,6 +38,7 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import api from '../utils/axios';
+import { checkSensitiveContent } from '../utils/contentModeration';
 
 const { TabPane } = Tabs;
 const { Title, Text, Paragraph } = Typography;
@@ -738,6 +739,11 @@ const ProfilePage = () => {
                     onChange={(e) => setCommentText(e.target.value)}
                     onPressEnter={async () => {
                       if (!commentText.trim()) return;
+                      const check = checkSensitiveContent(commentText);
+                      if (check.blocked) {
+                        message.error(check.message);
+                        return;
+                      }
                       try {
                         await api.post(`/api/posts/${selectedPost.id}/comment`, {
                           content: commentText.trim(),
@@ -747,8 +753,8 @@ const ProfilePage = () => {
                         const next = Array.isArray(res.data) ? res.data : [];
                         setPosts(next);
                         setSelectedPost(next.find((p) => p.id === selectedPost.id) || selectedPost);
-                      } catch {
-                        message.error('Could not comment');
+                      } catch (err) {
+                        message.error(err.response?.data?.message || 'Could not comment');
                       }
                     }}
                   />
@@ -756,6 +762,11 @@ const ProfilePage = () => {
                     type="primary"
                     onClick={async () => {
                       if (!commentText.trim()) return;
+                      const check = checkSensitiveContent(commentText);
+                      if (check.blocked) {
+                        message.error(check.message);
+                        return;
+                      }
                       try {
                         await api.post(`/api/posts/${selectedPost.id}/comment`, {
                           content: commentText.trim(),
@@ -765,8 +776,8 @@ const ProfilePage = () => {
                         const next = Array.isArray(res.data) ? res.data : [];
                         setPosts(next);
                         setSelectedPost(next.find((p) => p.id === selectedPost.id) || selectedPost);
-                      } catch {
-                        message.error('Could not comment');
+                      } catch (err) {
+                        message.error(err.response?.data?.message || 'Could not comment');
                       }
                     }}
                   >

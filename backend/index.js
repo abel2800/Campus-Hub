@@ -112,10 +112,19 @@ io.on('connection', (socket) => {
       
       // Handle private messages
       socket.on('private-message', (data) => {
-        const { recipientId, message } = data;
+        const { recipientId, message: msgText } = data;
+        const { checkSensitiveContent } = require('./utils/contentModeration');
+        const check = checkSensitiveContent(msgText);
+        if (check.blocked) {
+          socket.emit('private-message-blocked', {
+            message: check.message,
+            code: 'SENSITIVE_CONTENT',
+          });
+          return;
+        }
         io.to(`user:${recipientId}`).emit('private-message', {
           senderId: userId,
-          message
+          message: msgText,
         });
       });
     } catch (error) {

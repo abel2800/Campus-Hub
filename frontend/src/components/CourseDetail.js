@@ -17,6 +17,8 @@ const CourseDetail = () => {
   const [selectedVideo, setSelectedVideo] = useState(null);
   const [enrolled, setEnrolled] = useState(false);
   const [enrolling, setEnrolling] = useState(false);
+  const [activeTab, setActiveTab] = useState('1');
+  const [courseProgress, setCourseProgress] = useState(0);
 
   useEffect(() => {
     if (courseId && courseId !== 'undefined') {
@@ -77,7 +79,11 @@ const CourseDetail = () => {
     try {
       const response = await axios.get('/api/courses/user/enrolled');
       const enrolledCourses = response.data;
-      setEnrolled(enrolledCourses.some(course => course.id === parseInt(courseId)));
+      const match = enrolledCourses.find(
+        (c) => c.id === parseInt(courseId, 10) || String(c.id) === String(courseId)
+      );
+      setEnrolled(!!match);
+      if (match) setCourseProgress(match.progress || 0);
     } catch (error) {
       console.error('Error checking enrollment:', error);
     }
@@ -105,12 +111,8 @@ const CourseDetail = () => {
       
       message.success('Successfully enrolled in course!');
       setEnrolled(true);
-      
-      // Force refresh the My Courses page next time it's loaded
+      setActiveTab('2');
       localStorage.setItem('refreshMyCourses', 'true');
-      
-      // Redirect to My Courses page
-      navigate('/my-courses');
     } catch (error) {
       console.error('Error enrolling in course:', error);
       
@@ -120,7 +122,7 @@ const CourseDetail = () => {
       } else if (error.response?.status === 400 && error.response?.data?.message === 'Already enrolled in this course') {
         message.info('You are already enrolled in this course');
         setEnrolled(true);
-        navigate('/my-courses');
+        setActiveTab('2');
       } else {
         message.error('Failed to enroll in course. Please try again.');
       }
@@ -278,7 +280,7 @@ const CourseDetail = () => {
       </div>
 
       <div className="course-content">
-        <Tabs defaultActiveKey="1">
+        <Tabs activeKey={activeTab} onChange={setActiveTab}>
           <TabPane tab="Overview" key="1">
             <div className="course-overview">
               <Title level={3}>About this course</Title>
@@ -334,6 +336,13 @@ const CourseDetail = () => {
                     </div>
                   </div>
                 )}
+
+                {enrolled && (
+                  <div className="info-item">
+                    <Title level={5}>Your progress</Title>
+                    <div>{courseProgress}%</div>
+                  </div>
+                )}
                 
                 {course.totalDuration !== undefined && (
                   <div className="info-item">
@@ -363,9 +372,9 @@ const CourseDetail = () => {
                 <Button 
                   type="primary" 
                   size="large" 
-                  onClick={() => navigate(`/course-player/${courseId}`)}
+                  onClick={() => setActiveTab('2')}
                 >
-                  Continue Learning
+                  {courseProgress > 0 ? 'Continue Learning' : 'Start Learning'}
                 </Button>
                 <Button 
                   type="default" 
@@ -383,46 +392,77 @@ const CourseDetail = () => {
           
           {(course.contentType === 'video' || course.contentType === 'mixed' || !course.contentType) && (
             <TabPane tab="Videos" key="2">
-              <div className="video-container">
-                <div className="video-player">
-                  {selectedVideo ? (
-                    <VideoPlayer videoUrl={selectedVideo.videoUrl} />
-                  ) : (
-                    <div className="no-video-placeholder">
-                      <PlayCircleOutlined style={{ fontSize: 48 }} />
-                      <p>Select a video to play</p>
-                    </div>
-                  )}
-                  
-                  {selectedVideo && (
-                    <div className="video-info">
-                      <Title level={4}>{selectedVideo.title}</Title>
-                      <Paragraph>{selectedVideo.description}</Paragraph>
-                    </div>
-                  )}
-                </div>
-                
-                <div className="video-list">
-                  <List
-                    itemLayout="horizontal"
-                    dataSource={course.videos || []}
-                    locale={{ emptyText: 'No videos available for this course' }}
-                    renderItem={(video) => (
-                      <List.Item 
-                        onClick={() => handleVideoSelect(video)}
-                        className={selectedVideo && selectedVideo.id === video.id ? 'selected-video' : ''}
-                        style={{ cursor: 'pointer' }}
-                      >
-                        <List.Item.Meta
-                          avatar={<PlayCircleOutlined style={{ fontSize: 24 }} />}
-                          title={video.title}
-                          description={`Duration: ${Math.floor(video.duration / 60)}:${video.duration % 60 < 10 ? '0' : ''}${video.duration % 60}`}
-                        />
-                      </List.Item>
+              {!enrolled ? (
+                <Alert
+                  type="info"
+                  showIcon
+                  message="Enroll to watch videos"
+                  description="Join this course to unlock the video player and track your progress toward 100%."
+                  action={
+                    <Button type="primary" loading={enrolling} onClick={handleEnroll}>
+                      Enroll Now
+                    </Button>
+                  }
+                />
+              ) : (
+                <div className="video-container">
+                  <div className="video-player">
+                    {selectedVideo ? (
+                      <VideoPlayer
+                        videoUrl={selectedVideo.videoUrl}
+                        courseId={courseId}
+                        videoId={selectedVideo.id}
+                        enrolled={enrolled}
+                        onProgressUpdate={(data) => {
+                          if (data?.progress != null) setCourseProgress(data.progress);
+                        }}
+                      />
+                    ) : (
+                      <div className="no-video-placeholder">
+                        <PlayCircleOutlined style={{ fontSize: 48 }} />
+                        <p>Select a video to play</p>
+                      </div>
                     )}
-                  />
+                    
+                    {selectedVideo && (
+                      <div className="video-info">
+                        <Title level={4}>{selectedVideo.title}</Title>
+                        <Paragraph>{selectedVideo.description}</Paragraph>
+                        <Paragraph type="secondary">Course progress: {courseProgress}%</Paragraph>
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div className="video-list">
+                    <List
+                      itemLayout="horizontal"
+                      dataSource={course.videos || []}
+                      locale={{ emptyText: 'No videos available for this course' }}
+                      renderItem={(video) => {
+                        const secs = Number(video.duration) || 0;
+                        const mins = Math.floor(secs / 60);
+                        const rem = secs % 60;
+                        const durationLabel = secs
+                          ? `Duration: ${mins}:${rem < 10 ? '0' : ''}${rem}`
+                          : 'Duration: —';
+                        return (
+                          <List.Item 
+                            onClick={() => handleVideoSelect(video)}
+                            className={selectedVideo && selectedVideo.id === video.id ? 'selected-video' : ''}
+                            style={{ cursor: 'pointer' }}
+                          >
+                            <List.Item.Meta
+                              avatar={<PlayCircleOutlined style={{ fontSize: 24 }} />}
+                              title={video.title}
+                              description={durationLabel}
+                            />
+                          </List.Item>
+                        );
+                      }}
+                    />
+                  </div>
                 </div>
-              </div>
+              )}
             </TabPane>
           )}
         </Tabs>

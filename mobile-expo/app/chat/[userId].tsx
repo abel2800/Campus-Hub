@@ -18,6 +18,7 @@ import api from '../../src/services/api';
 import { C, Gradients } from '../../src/theme/colors';
 import { Glass, GradAvatar } from '../../src/components/campus/CampusUI';
 import { initials } from '../../src/utils/format';
+import { checkSensitiveContent } from '../../src/utils/contentModeration';
 
 export default function ChatThreadScreen() {
   const { userId } = useLocalSearchParams<{ userId: string }>();
@@ -57,6 +58,11 @@ export default function ChatThreadScreen() {
 
   const send = async () => {
     if (!text.trim()) return;
+    const check = checkSensitiveContent(text);
+    if (check.blocked) {
+      setError(check.message || 'Sensitive content is not allowed.');
+      return;
+    }
     try {
       setError('');
       await api.post('/messages/send', {

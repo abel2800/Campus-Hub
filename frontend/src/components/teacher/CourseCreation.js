@@ -33,6 +33,7 @@ import {
 import api from '../../utils/axios';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { isYouTubeUrl, isYouTubePlaylistUrl } from '../../utils/youtube';
 
 const { Option } = Select;
 const { TextArea } = Input;
@@ -48,6 +49,8 @@ const CourseCreation = () => {
   const [videoList, setVideoList] = useState([]);
   const [uploadingVideo, setUploadingVideo] = useState(false);
   const [videoUploadProgress, setVideoUploadProgress] = useState(0);
+  const [youtubeInput, setYoutubeInput] = useState('');
+  const [playlistInput, setPlaylistInput] = useState('');
   const navigate = useNavigate();
   const { user } = useAuth();
 
@@ -304,6 +307,36 @@ const CourseCreation = () => {
   const removeVideo = (uid) => {
     setVideoList(videoList.filter(video => video.uid !== uid));
   };
+
+  const addYouTubeToList = () => {
+    const url = youtubeInput.trim();
+    if (!isYouTubeUrl(url)) {
+      message.error('Paste a valid YouTube video URL');
+      return;
+    }
+    if (isYouTubePlaylistUrl(url)) {
+      message.warning('For playlists, add videos after creating the course via the Playlist tab on the course video page.');
+      return;
+    }
+    if (videoList.length >= 20) {
+      message.error('Maximum 20 videos per course');
+      return;
+    }
+    setVideoList([
+      ...videoList,
+      {
+        uid: Date.now(),
+        name: url,
+        status: 'done',
+        percent: 100,
+        source: 'youtube',
+        youtubeUrl: url,
+        title: 'YouTube video',
+      },
+    ]);
+    setYoutubeInput('');
+    message.success('YouTube video added to course');
+  };
   
   const updateVideoTitle = (uid, title) => {
     setVideoList(prevList => {
@@ -436,20 +469,26 @@ const CourseCreation = () => {
         // Upload each video
         for (let i = 0; i < videoList.length; i++) {
           const video = videoList[i];
-          const videoFormData = new FormData();
-          videoFormData.append('title', video.title);
-          videoFormData.append('description', 'Video for ' + values.title);
-          videoFormData.append('video', video.originFileObj);
-          videoFormData.append('order', i + 1);
-          
           try {
-            await api.post(`/api/teacher/courses/${courseId}/videos`, videoFormData, {
-              headers: {
-                'Content-Type': 'multipart/form-data'
-              }
-            });
+            if (video.source === 'youtube') {
+              await api.post(`/api/teacher/courses/${courseId}/videos/youtube`, {
+                url: video.youtubeUrl,
+                title: video.title,
+                description: `Video for ${finalTitle}`,
+                order: i + 1,
+              });
+            } else {
+              const videoFormData = new FormData();
+              videoFormData.append('title', video.title);
+              videoFormData.append('description', 'Video for ' + values.title);
+              videoFormData.append('video', video.originFileObj);
+              videoFormData.append('order', i + 1);
+              await api.post(`/api/teacher/courses/${courseId}/videos`, videoFormData, {
+                headers: { 'Content-Type': 'multipart/form-data' },
+              });
+            }
           } catch (videoError) {
-            console.error(`Failed to upload video ${i+1}:`, videoError);
+            console.error(`Failed to upload video ${i + 1}:`, videoError);
             videoUploadSuccess = false;
           }
         }
@@ -678,7 +717,7 @@ const CourseCreation = () => {
         <div>
           <Title level={4}>Course Videos</Title>
           <Text type="secondary">
-            Upload at least 1 video for your course. You can add between 1 and 20 videos.
+            Upload video files or link YouTube videos (no download). Add between 1 and 20 videos.
           </Text>
           
           <Divider />
@@ -694,7 +733,7 @@ const CourseCreation = () => {
             <p className="ant-upload-drag-icon">
               <InboxOutlined />
             </p>
-            <p className="ant-upload-text">Click or drag video to this area to upload</p>
+            <p className="ant-upload-text">Click or drag video to upload from your computer</p>
             <p className="ant-upload-hint">
               Support for a single video upload. Max size: 100MB.
             </p>
@@ -702,6 +741,23 @@ const CourseCreation = () => {
               <Progress percent={videoUploadProgress} status="active" style={{ marginTop: 16 }} />
             )}
           </Upload.Dragger>
+
+          <Divider>or mirror from YouTube</Divider>
+
+          <Space.Compact style={{ width: '100%' }}>
+            <Input
+              placeholder="https://www.youtube.com/watch?v=..."
+              value={youtubeInput}
+              onChange={(e) => setYoutubeInput(e.target.value)}
+              onPressEnter={addYouTubeToList}
+            />
+            <Button type="primary" onClick={addYouTubeToList} disabled={videoList.length >= 20}>
+              Add YouTube link
+            </Button>
+          </Space.Compact>
+          <Text type="secondary" style={{ display: 'block', marginTop: 8 }}>
+            Videos play embedded in the course — nothing is downloaded to the server.
+          </Text>
           
           <div style={{ marginTop: 24 }}>
             <Typography.Title level={5}>
@@ -732,7 +788,9 @@ const CourseCreation = () => {
                         />
                         <div style={{ marginTop: 8 }}>
                           <Text type="secondary">
-                            {(video.size / 1024 / 1024).toFixed(2)} MB
+                            {video.source === 'youtube'
+                              ? 'YouTube (mirrored)'
+                              : `${(video.size / 1024 / 1024).toFixed(2)} MB`}
                             {video.status === 'uploading' && ' - Uploading...'}
                             {video.status === 'done' && ' - Ready'}
                             {video.status === 'error' && ' - Upload Failed'}

@@ -86,7 +86,12 @@ export default function UserProfileScreen() {
       Alert.alert('Friends', 'Friend request accepted');
       await load();
     } catch (e: any) {
-      Alert.alert('Error', e?.response?.data?.message || 'Could not accept');
+      const msg = e?.response?.data?.message || 'Could not accept';
+      if (String(msg).toLowerCase().includes('not found')) {
+        await load();
+        return;
+      }
+      Alert.alert('Error', msg);
     } finally {
       setBusy(false);
     }

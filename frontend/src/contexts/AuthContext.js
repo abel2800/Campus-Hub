@@ -94,6 +94,7 @@ export function AuthProvider({ children }) {
     axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
     setUser(userWithRole);
     setIsAuthenticated(true);
+    window.dispatchEvent(new Event('auth-changed'));
     return userWithRole;
   };
 
@@ -135,6 +136,7 @@ export function AuthProvider({ children }) {
       console.log('User role determined as:', userWithRole.role);
       
       setIsAuthenticated(true);
+      window.dispatchEvent(new Event('auth-changed'));
       
       return userWithRole; // Return user data with added role for role checking
     } catch (error) {
@@ -158,6 +160,7 @@ export function AuthProvider({ children }) {
     // Clear user from state
     setUser(null);
     setIsAuthenticated(false);
+    window.dispatchEvent(new Event('auth-changed'));
     
     // Redirect to landing page
     window.location.href = '/';

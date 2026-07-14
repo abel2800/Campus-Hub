@@ -27,6 +27,7 @@ import {
 } from '../../src/components/campus/CampusUI';
 import { useAuth } from '../../src/context/AuthContext';
 import * as ImagePicker from 'expo-image-picker';
+import { checkSensitiveContent } from '../../src/utils/contentModeration';
 
 import { initials, timeAgo } from '../../src/utils/format';
 
@@ -48,6 +49,30 @@ export default function SocialScreen() {
   const [postImage, setPostImage] = useState<string | null>(null);
   const [commentDrafts, setCommentDrafts] = useState<Record<number, string>>({});
   const [activeStory, setActiveStory] = useState<any | null>(null);
+  const [storyComment, setStoryComment] = useState('');
+  const [storyLiked, setStoryLiked] = useState(false);
+  const [storyLikes, setStoryLikes] = useState(0);
+  const [storyComments, setStoryComments] = useState<any[]>([]);
+  const [storyLikers, setStoryLikers] = useState<any[]>([]);
+  const [storyInsightsOpen, setStoryInsightsOpen] = useState(false);
+  const [storyCaptionDraft, setStoryCaptionDraft] = useState('');
+
+  const isOwnStory = (story: any) =>
+    !!story &&
+    !!user &&
+    ((story.userId || story.user?.id) === user.id);
+
+  const loadStoryInsights = async (storyId: number) => {
+    try {
+      const { data } = await api.get(`/stories/${storyId}/insights`);
+      setStoryLikers(data.likes || []);
+      setStoryComments(data.comments || []);
+      setStoryLikes(data.likesCount ?? 0);
+      return data;
+    } catch {
+      return null;
+    }
+  };
 
   const loadStories = async () => {
     try {
@@ -105,6 +130,13 @@ export default function SocialScreen() {
     load();
   }, []);
 
+  useEffect(() => {
+    if (!activeStory?.id || !isOwnStory(activeStory)) return undefined;
+    loadStoryInsights(activeStory.id);
+    const t = setInterval(() => loadStoryInsights(activeStory.id), 4000);
+    return () => clearInterval(t);
+  }, [activeStory?.id, user?.id]);
+
   const like = async (postId: number) => {
     try {
       await api.post(`/posts/${postId}/like`);
@@ -117,6 +149,11 @@ export default function SocialScreen() {
   const comment = async (postId: number) => {
     const content = (commentDrafts[postId] || '').trim();
     if (!content) return;
+    const check = checkSensitiveContent(content);
+    if (check.blocked) {
+      Alert.alert('Blocked', check.message || 'Sensitive content is not allowed.');
+      return;
+    }
     try {
       await api.post(`/posts/${postId}/comment`, { content });
       setCommentDrafts((prev) => ({ ...prev, [postId]: '' }));
@@ -138,7 +175,18 @@ export default function SocialScreen() {
       const story = stories.find(
         (st: any) => (st.userId || st.user?.id) === s.userId,
       );
-      if (story) setActiveStory(story);
+      if (story) {
+        setActiveStory(story);
+        setStoryInsightsOpen(false);
+        setStoryLiked(!!story.isLiked);
+        setStoryLikes(story.likes || 0);
+        setStoryComments(story.comments || []);
+        setStoryLikers(story.likers || []);
+        setStoryComment('');
+        if ((story.userId || story.user?.id) === user?.id) {
+          loadStoryInsights(story.id);
+        }
+      }
     } catch {
       /* ignore */
     }
@@ -147,15 +195,29 @@ export default function SocialScreen() {
   const likeStory = async () => {
     if (!activeStory?.id) return;
     try {
-      await api.put(`/stories/${activeStory.id}/like`);
-      Alert.alert('Liked', 'Story liked');
-    } catch {
-      try {
-        await api.post(`/stories/${activeStory.id}/like`);
-        Alert.alert('Liked', 'Story liked');
-      } catch (e: any) {
-        Alert.alert('Error', e?.response?.data?.message || 'Could not like story');
-      }
+      const { data } = await api.post(`/stories/${activeStory.id}/like`);
+      setStoryLiked(!!data.liked);
+      setStoryLikes(data.likes ?? storyLikes);
+    } catch (e: any) {
+      Alert.alert('Error', e?.response?.data?.message || 'Could not like story');
+    }
+  };
+
+  const sendStoryComment = async () => {
+    if (!activeStory?.id) return;
+    const content = storyComment.trim();
+    if (!content) return;
+    const check = checkSensitiveContent(content);
+    if (check.blocked) {
+      Alert.alert('Blocked', check.message || 'Sensitive content is not allowed.');
+      return;
+    }
+    try {
+      const { data } = await api.post(`/stories/${activeStory.id}/comments`, { content });
+      setStoryComments((prev) => [...prev, data]);
+      setStoryComment('');
+    } catch (e: any) {
+      Alert.alert('Error', e?.response?.data?.message || 'Could not comment');
     }
   };
 
@@ -185,6 +247,11 @@ export default function SocialScreen() {
       quality: 0.8,
     });
     if (result.canceled || !result.assets[0]) return;
+    const check = checkSensitiveContent(storyCaptionDraft);
+    if (check.blocked) {
+      Alert.alert('Blocked', check.message || 'Sensitive content is not allowed.');
+      return;
+    }
     try {
       const form = new FormData();
       form.append('media', {
@@ -192,7 +259,11 @@ export default function SocialScreen() {
         name: 'story.jpg',
         type: 'image/jpeg',
       } as any);
+      if (storyCaptionDraft.trim()) {
+        form.append('caption', storyCaptionDraft.trim());
+      }
       await api.post('/stories', form);
+      setStoryCaptionDraft('');
       load();
       Alert.alert('Story added', 'Your story is now visible to friends.');
     } catch (e: any) {
@@ -203,6 +274,11 @@ export default function SocialScreen() {
   const createPost = async () => {
     if (!caption.trim() && !postImage) {
       Alert.alert('Empty post', 'Write something or add a photo.');
+      return;
+    }
+    const check = checkSensitiveContent(caption);
+    if (check.blocked) {
+      Alert.alert('Blocked', check.message || 'Sensitive content is not allowed.');
       return;
     }
     setPosting(true);
@@ -241,6 +317,14 @@ export default function SocialScreen() {
           }
         />
       </SafeAreaView>
+
+      <TextInput
+        style={styles.storyCaptionField}
+        placeholder="Optional caption for your next story"
+        placeholderTextColor={C.textMute}
+        value={storyCaptionDraft}
+        onChangeText={setStoryCaptionDraft}
+      />
 
       <ScrollView
         horizontal
@@ -417,7 +501,14 @@ export default function SocialScreen() {
 
       {activeStory ? (
         <View style={styles.storyModal}>
-          <TouchableOpacity style={styles.storyClose} onPress={() => setActiveStory(null)}>
+          <TouchableOpacity
+            style={styles.storyClose}
+            onPress={() => {
+              setActiveStory(null);
+              setStoryComment('');
+              setStoryInsightsOpen(false);
+            }}
+          >
             <Ionicons name="close" size={24} color="#fff" />
           </TouchableOpacity>
           <Image
@@ -426,12 +517,91 @@ export default function SocialScreen() {
             resizeMode="contain"
           />
           <Text style={styles.storyModalUser}>
-            {activeStory.user?.username || 'Story'}
+            {isOwnStory(activeStory) ? 'Your story' : (activeStory.user?.username || 'Story')}
           </Text>
-          <TouchableOpacity style={styles.storyLikeBtn} onPress={likeStory}>
-            <Ionicons name="heart" size={22} color={C.g2a} />
-            <Text style={styles.storyLikeText}>Like story</Text>
-          </TouchableOpacity>
+          {activeStory.caption ? (
+            <Text style={styles.storyCaption}>{activeStory.caption}</Text>
+          ) : null}
+
+          {isOwnStory(activeStory) ? (
+            <>
+              <TouchableOpacity
+                style={styles.storyInsightsBar}
+                onPress={() => setStoryInsightsOpen((v) => !v)}
+              >
+                <Text style={styles.storyInsightsBarText}>
+                  ❤️ {storyLikes} likes  ·  💬 {storyComments.length} replies
+                </Text>
+                <Text style={styles.storyInsightsHint}>
+                  {storyInsightsOpen ? 'Hide activity' : 'Tap to see who liked & replied'}
+                </Text>
+              </TouchableOpacity>
+
+              {storyInsightsOpen ? (
+                <View style={styles.storyInsightsPanel}>
+                  <Text style={styles.storyInsightsTitle}>Likes</Text>
+                  {storyLikers.length === 0 ? (
+                    <Text style={styles.storyInsightsEmpty}>No likes yet</Text>
+                  ) : (
+                    storyLikers.map((liker) => (
+                      <View key={`${liker.id}-${liker.likedAt}`} style={styles.storyInsightsRow}>
+                        <GradAvatar
+                          initials={initials(liker.username)}
+                          size={32}
+                          uri={mediaUrl(liker.avatar)}
+                        />
+                        <Text style={styles.storyInsightsName}>{liker.username}</Text>
+                      </View>
+                    ))
+                  )}
+
+                  <Text style={[styles.storyInsightsTitle, { marginTop: 12 }]}>Replies</Text>
+                  {storyComments.length === 0 ? (
+                    <Text style={styles.storyInsightsEmpty}>No replies yet</Text>
+                  ) : (
+                    storyComments.map((c) => (
+                      <View key={c.id} style={styles.storyInsightsReply}>
+                        <Text style={styles.storyInsightsName}>{c.user?.username || 'user'}</Text>
+                        <Text style={styles.storyInsightsReplyText}>{c.content}</Text>
+                      </View>
+                    ))
+                  )}
+                </View>
+              ) : null}
+            </>
+          ) : (
+            <>
+              <View style={styles.storyCommentsBox}>
+                {storyComments.slice(-4).map((c) => (
+                  <Text key={c.id} style={styles.storyCommentLine}>
+                    <Text style={styles.storyCommentUser}>{c.user?.username || 'user'} </Text>
+                    {c.content}
+                  </Text>
+                ))}
+              </View>
+
+              <View style={styles.storyActions}>
+                <TouchableOpacity style={styles.storyLikeBtn} onPress={likeStory}>
+                  <Ionicons
+                    name={storyLiked ? 'heart' : 'heart-outline'}
+                    size={22}
+                    color={storyLiked ? C.g2a : '#fff'}
+                  />
+                  <Text style={styles.storyLikeText}>{storyLikes}</Text>
+                </TouchableOpacity>
+                <TextInput
+                  style={styles.storyCommentInput}
+                  placeholder="Send message..."
+                  placeholderTextColor="rgba(255,255,255,0.55)"
+                  value={storyComment}
+                  onChangeText={setStoryComment}
+                />
+                <TouchableOpacity onPress={sendStoryComment}>
+                  <Ionicons name="send" size={20} color="#fff" />
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
         </View>
       ) : null}
     </Screen>
@@ -540,17 +710,74 @@ const styles = StyleSheet.create({
   storyClose: { position: 'absolute', top: 50, right: 20, zIndex: 2 },
   storyFull: { width: '100%', height: '70%' },
   storyModalUser: { color: '#fff', marginTop: 12, fontWeight: '700' },
+  storyCaption: { color: 'rgba(255,255,255,0.85)', marginTop: 6, fontSize: 13 },
+  storyInsightsBar: {
+    width: '100%',
+    marginTop: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    alignItems: 'center',
+  },
+  storyInsightsBarText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+  storyInsightsHint: { color: 'rgba(255,255,255,0.6)', fontSize: 11, marginTop: 4 },
+  storyInsightsPanel: {
+    width: '100%',
+    marginTop: 10,
+    maxHeight: 220,
+    backgroundColor: 'rgba(20,20,28,0.95)',
+    borderRadius: 16,
+    padding: 14,
+  },
+  storyInsightsTitle: { color: '#fff', fontWeight: '700', fontSize: 14, marginBottom: 8 },
+  storyInsightsEmpty: { color: 'rgba(255,255,255,0.45)', fontSize: 12, marginBottom: 8 },
+  storyInsightsRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
+  storyInsightsName: { color: '#fff', fontWeight: '600', fontSize: 13 },
+  storyInsightsReply: { marginBottom: 10 },
+  storyInsightsReplyText: { color: 'rgba(255,255,255,0.85)', fontSize: 12, marginTop: 2 },
+  storyCommentsBox: { width: '100%', marginTop: 10, maxHeight: 90 },
+  storyCommentLine: { color: '#fff', fontSize: 12, marginBottom: 4 },
+  storyCommentUser: { fontWeight: '700' },
+  storyActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    width: '100%',
+    marginTop: 14,
+  },
   storyLikeBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginTop: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     borderRadius: 20,
     backgroundColor: 'rgba(255,255,255,0.1)',
   },
   storyLikeText: { color: '#fff', fontWeight: '600' },
+  storyCommentInput: {
+    flex: 1,
+    color: '#fff',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.25)',
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    fontSize: 13,
+  },
+  storyCaptionField: {
+    marginHorizontal: 16,
+    marginBottom: 10,
+    color: C.text,
+    backgroundColor: C.glass,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 12,
+    borderWidth: 0.5,
+    borderColor: C.glassBorder,
+  },
   feedEmpty: {
     color: C.textDim,
     textAlign: 'center',

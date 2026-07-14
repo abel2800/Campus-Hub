@@ -10,6 +10,8 @@ const Post = require('./Post');
 const Comment = require('./Comment');
 const Like = require('./Like');
 const Story = require('./Story');
+const StoryLike = require('./StoryLike');
+const StoryComment = require('./StoryComment');
 const Message = require('./Message');
 const Chat = require('./Chat');
 const Friend = require('./Friend');
@@ -34,6 +36,8 @@ const db = {
   Comment,
   Like,
   Story,
+  StoryLike,
+  StoryComment,
   Message,
   Chat,
   Friend,
@@ -93,6 +97,20 @@ try {
   if (validateModel(User, 'User') && validateModel(Story, 'Story')) {
     User.hasMany(Story, { foreignKey: 'userId', as: 'stories' });
     Story.belongsTo(User, { foreignKey: 'userId', as: 'user' });
+  }
+
+  if (validateModel(Story, 'Story') && validateModel(StoryLike, 'StoryLike') && validateModel(User, 'User')) {
+    Story.hasMany(StoryLike, { foreignKey: 'storyId', as: 'storyLikes', onDelete: 'CASCADE' });
+    StoryLike.belongsTo(Story, { foreignKey: 'storyId', as: 'story' });
+    User.hasMany(StoryLike, { foreignKey: 'userId', as: 'storyLikes' });
+    StoryLike.belongsTo(User, { foreignKey: 'userId', as: 'user' });
+  }
+
+  if (validateModel(Story, 'Story') && validateModel(StoryComment, 'StoryComment') && validateModel(User, 'User')) {
+    Story.hasMany(StoryComment, { foreignKey: 'storyId', as: 'storyComments', onDelete: 'CASCADE' });
+    StoryComment.belongsTo(Story, { foreignKey: 'storyId', as: 'story' });
+    User.hasMany(StoryComment, { foreignKey: 'userId', as: 'storyComments' });
+    StoryComment.belongsTo(User, { foreignKey: 'userId', as: 'user' });
   }
 
   // Friend associations

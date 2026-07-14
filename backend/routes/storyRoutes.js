@@ -81,8 +81,16 @@ router.post('/', authMiddleware, upload.single('media'), async (req, res) => {
 // DELETE /api/stories/:id - Delete a story
 router.delete('/:id', authMiddleware, storyController.deleteStory);
 
-// PUT or POST /api/stories/:id/like - Like a story
+// PUT or POST /api/stories/:id/like - Toggle like
 router.put('/:id/like', authMiddleware, storyController.likeStory);
 router.post('/:id/like', authMiddleware, storyController.likeStory);
+
+// Story insights (owner only)
+router.get('/:id/insights', authMiddleware, storyController.getStoryInsights);
+
+// Story comments (Instagram-style)
+router.get('/:id/comments', authMiddleware, storyController.getStoryComments);
+router.post('/:id/comments', authMiddleware, storyController.addStoryComment);
+router.post('/:id/comment', authMiddleware, storyController.addStoryComment);
 
 module.exports = router; 

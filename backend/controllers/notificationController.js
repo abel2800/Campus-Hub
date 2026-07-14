@@ -77,7 +77,7 @@ const notificationController = {
   createNotification: async (userId, type, content, senderId = null, entityId = null) => {
     try {
       // Validate notification type
-      const validTypes = ['friend_request', 'message', 'post_like', 'post_comment', 'course_enroll'];
+      const validTypes = ['friend_request', 'friend_request_accepted', 'message', 'post_like', 'post_comment', 'course_enroll'];
       if (!validTypes.includes(type)) {
         console.error(`Invalid notification type: ${type}`);
         return null;

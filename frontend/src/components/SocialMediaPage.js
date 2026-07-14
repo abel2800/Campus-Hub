@@ -34,6 +34,7 @@ import moment from 'moment';
 import PostCard from './PostCard';
 import { preloadImages } from '../utils/imageLoader';
 import { throttle } from '../utils/debounce';
+import { checkSensitiveContent } from '../utils/contentModeration';
 
 const { Content } = Layout;
 const { TextArea } = Input;
@@ -498,6 +499,12 @@ const SocialMediaPage = () => {
       return;
     }
 
+    const check = checkSensitiveContent(content);
+    if (check.blocked) {
+      message.error(check.message);
+      return;
+    }
+
     try {
       await api.post(`/api/posts/${postId}/comment`, { content });
       
@@ -511,7 +518,7 @@ const SocialMediaPage = () => {
       loadPosts();
     } catch (error) {
       console.error('Error commenting:', error);
-      message.error('Failed to add comment');
+      message.error(error.response?.data?.message || 'Failed to add comment');
     }
   };
 
@@ -561,6 +568,12 @@ const SocialMediaPage = () => {
   const handleCreatePost = async () => {
     if (!mediaFile && !caption.trim()) {
       message.error('Please add a photo, video, or write something');
+      return;
+    }
+
+    const check = checkSensitiveContent(caption);
+    if (check.blocked) {
+      message.error(check.message);
       return;
     }
 
@@ -913,7 +926,7 @@ const SocialMediaPage = () => {
 
   const handleAddFriend = async (friendId) => {
     try {
-      await api.post(`/api/friends/request/${friendId}`);
+      await api.post('/api/friends/request', { receiverId: friendId });
       message.success('Friend request sent!');
     } catch (error) {
       console.error('Error sending friend request:', error);

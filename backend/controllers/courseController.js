@@ -336,13 +336,16 @@ const courseController = {
     updateCourse: async (req, res) => {
         try {
             const courseId = req.params.id;
+            const userId = req.user?.id;
             console.log(`Updating course ${courseId} with data:`, req.body);
             
-            // Check if course exists
-            const course = await Course.findByPk(courseId);
+            // Check if course exists and belongs to this instructor
+            const course = await Course.findOne({
+                where: { id: courseId, instructorId: userId }
+            });
             if (!course) {
-                console.log(`Course ${courseId} not found`);
-                return res.status(404).json({ message: 'Course not found' });
+                console.log(`Course ${courseId} not found or user ${userId} not authorized`);
+                return res.status(404).json({ message: 'Course not found or you do not have permission' });
             }
             
             // Get file path if a new thumbnail was uploaded
@@ -352,7 +355,7 @@ const courseController = {
                 console.log('New thumbnail uploaded to:', thumbnailPath);
             }
 
-            // Update the course data
+            // Update the course data (do not allow reassigning instructor via this endpoint)
             const updatedData = {
                 title: req.body.title || course.title,
                 description: req.body.description || course.description,
@@ -362,17 +365,9 @@ const courseController = {
                 status: req.body.status || course.status,
                 imageUrl: thumbnailPath,
                 thumbnail: thumbnailPath,
-                // If deadline is provided in the request, update both expirationDate and deadline
                 expirationDate: req.body.deadline ? new Date(req.body.deadline) : course.expirationDate,
                 deadline: req.body.deadline ? new Date(req.body.deadline) : course.deadline
             };
-            
-            // If teacherId is provided in the request, convert it to instructorId
-            if (req.body.teacherId) {
-                updatedData.instructorId = req.body.teacherId;
-            } else if (req.body.instructorId) {
-                updatedData.instructorId = req.body.instructorId;
-            }
             
             console.log('Final updated course data:', updatedData);
             await course.update(updatedData);
@@ -389,15 +384,16 @@ const courseController = {
     deleteCourse: async (req, res) => {
         try {
             const courseId = req.params.id;
+            const userId = req.user?.id;
             console.log(`Deleting course ${courseId}`);
             
-            // Check if course exists
-            const course = await Course.findByPk(courseId);
+            const course = await Course.findOne({
+                where: { id: courseId, instructorId: userId }
+            });
             if (!course) {
-                return res.status(404).json({ message: 'Course not found' });
+                return res.status(404).json({ message: 'Course not found or you do not have permission' });
             }
             
-            // Delete the course
             await course.destroy();
             
             console.log(`Course ${courseId} deleted successfully`);

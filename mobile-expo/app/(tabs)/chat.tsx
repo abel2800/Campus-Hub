@@ -77,7 +77,13 @@ export default function ChatScreen() {
         await api.post(`/friends/requests/${u.requestId}/accept`);
         router.push(`/chat/${u.id}`);
       } catch (e: any) {
-        Alert.alert('Error', e?.response?.data?.message || 'Could not accept request');
+        const msg = e?.response?.data?.message || 'Could not accept request';
+        // Request may already be accepted from a prior partial success
+        if (String(msg).toLowerCase().includes('not found') || String(msg).toLowerCase().includes('already')) {
+          router.push(`/chat/${u.id}`);
+          return;
+        }
+        Alert.alert('Error', msg);
       }
       return;
     }

@@ -2,6 +2,7 @@ const { Message, User, Friend } = require('../models');
 const { Op } = require('sequelize');
 const sequelize = require('sequelize');
 const { assertFriends, areFriends } = require('../utils/friendship');
+const { rejectIfSensitive, normalizeText } = require('../utils/contentModeration');
 
 const messageController = {
   getMessages: async (req, res) => {
@@ -96,7 +97,8 @@ const messageController = {
       console.log('Sender user ID:', userId);
       
       // Extract participant ID and content from request body
-      const { participantId, content } = req.body;
+      const { participantId } = req.body;
+      const content = normalizeText(req.body.content);
       
       console.log('Receiver ID:', participantId);
       console.log('Message content:', content);
@@ -111,6 +113,8 @@ const messageController = {
         console.error('Missing content in request');
         return res.status(400).json({ message: 'Message content is required' });
       }
+
+      if (rejectIfSensitive(res, content, 'content')) return;
 
       await assertFriends(userId, participantId);
 

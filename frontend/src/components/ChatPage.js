@@ -6,6 +6,7 @@ import api from '../utils/axios';
 import { useSocket } from '../contexts/SocketContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate, useParams } from 'react-router-dom';
+import { checkSensitiveContent } from '../utils/contentModeration';
 
 const ChatContainer = styled.div`
   display: flex;
@@ -295,6 +296,12 @@ const ChatPage = () => {
         message.error('Please enter a message or attach a file');
         return;
       }
+
+      const sensitive = checkSensitiveContent(messageInput);
+      if (sensitive.blocked) {
+        message.error(sensitive.message);
+        return;
+      }
       
       if (!selectedFriend || !selectedFriend.id) {
         message.error('No recipient selected');
@@ -336,7 +343,8 @@ const ChatPage = () => {
         }
       } catch (error) {
         console.error('Error sending message:', error);
-        message.error('Failed to send message. Please try again.');
+        const apiMsg = error.response?.data?.message;
+        message.error(apiMsg || 'Failed to send message. Please try again.');
         // Restore input if sending failed
         setMessageInput(currentInput);
         setAttachment(currentAttachment);

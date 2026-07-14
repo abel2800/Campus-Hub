@@ -16,27 +16,21 @@ export function SocketProvider({ children }) {
   const [connected, setConnected] = useState(false);
   const socketRef = useRef(null);
 
-  useEffect(() => {
-    // Only initialize socket if we have a token (user is logged in)
-    const token = localStorage.getItem('token');
-    if (token) {
-      const newSocket = initializeSocket(token);
-      socketRef.current = newSocket;
+  const disconnectSocket = () => {
+    if (socketRef.current) {
+      socketRef.current.disconnect();
+      socketRef.current = null;
     }
-
-    return () => {
-      if (socketRef.current) {
-        socketRef.current.disconnect();
-      }
-    };
-  }, []);
+    setSocket(null);
+    setConnected(false);
+  };
 
   const initializeSocket = (token) => {
-    // Create socket connection with auth token
+    disconnectSocket();
+    if (!token) return null;
+
     const newSocket = io(process.env.REACT_APP_API_URL || 'http://localhost:5000', {
-      auth: {
-        token
-      }
+      auth: { token }
     });
 
     newSocket.on('connect', () => {
@@ -53,9 +47,31 @@ export function SocketProvider({ children }) {
       console.error('Socket error:', error);
     });
 
+    socketRef.current = newSocket;
     setSocket(newSocket);
     return newSocket;
   };
+
+  useEffect(() => {
+    const syncSocket = () => {
+      const token = localStorage.getItem('token');
+      if (token) {
+        initializeSocket(token);
+      } else {
+        disconnectSocket();
+      }
+    };
+
+    syncSocket();
+    window.addEventListener('auth-changed', syncSocket);
+    window.addEventListener('storage', syncSocket);
+
+    return () => {
+      window.removeEventListener('auth-changed', syncSocket);
+      window.removeEventListener('storage', syncSocket);
+      disconnectSocket();
+    };
+  }, []);
 
   const sendMessage = (event, data) => {
     if (socket) {
@@ -78,5 +94,3 @@ export function SocketProvider({ children }) {
     </SocketContext.Provider>
   );
 }
-
-export default SocketContext; 

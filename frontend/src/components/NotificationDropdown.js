@@ -91,6 +91,7 @@ const NotificationDropdown = () => {
     // Navigate based on notification type
     switch (notification.type) {
       case 'friend_request':
+      case 'friend_request_accepted':
         // For friend requests, navigate to the friends page
         navigate('/friends');
         break;
@@ -134,6 +135,7 @@ const NotificationDropdown = () => {
   const getIconForType = (type) => {
     switch (type) {
       case 'friend_request':
+      case 'friend_request_accepted':
         return <UserOutlined />;
       case 'message':
         return <MessageOutlined />;
@@ -151,6 +153,7 @@ const NotificationDropdown = () => {
   const getColorForType = (type) => {
     switch (type) {
       case 'friend_request':
+      case 'friend_request_accepted':
         return '#1890ff'; // Blue
       case 'message':
         return '#722ed1'; // Purple

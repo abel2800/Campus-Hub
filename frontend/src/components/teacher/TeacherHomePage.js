@@ -115,37 +115,7 @@ const TeacherHomePage = () => {
       setCourses(response.data);
     } catch (error) {
       console.error('Error fetching all courses:', error);
-      
-      // For demo purposes
-      setCourses([
-        { 
-          id: 1, 
-          title: 'Introduction to React', 
-          enrollmentCount: 42, 
-          category: 'programming', 
-          rating: 4.8, 
-          isArchived: false, 
-          description: 'A comprehensive introduction to React for beginners. Learn the fundamentals of building modern, interactive web applications with React.'
-        },
-        { 
-          id: 2, 
-          title: 'Advanced JavaScript', 
-          enrollmentCount: 36, 
-          category: 'programming', 
-          rating: 4.6, 
-          isArchived: false, 
-          description: 'Take your JavaScript skills to the next level. This course covers advanced concepts that will make you a better JavaScript developer.'
-        },
-        { 
-          id: 3, 
-          title: 'UI/UX Design Fundamentals', 
-          enrollmentCount: 28, 
-          category: 'design', 
-          rating: 4.5, 
-          isArchived: false, 
-          description: 'Learn the principles of effective UI/UX design. This course will teach you how to create beautiful, functional designs that users love.'
-        }
-      ]);
+      setCourses([]);
     }
   };
 

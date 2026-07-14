@@ -32,7 +32,7 @@ const friendController = {
       const requestId = req.params.requestId;
       const userId = req.user.id;
 
-      const request = await FriendRequest.findOne({
+      let request = await FriendRequest.findOne({
         where: {
           id: requestId,
           receiverId: userId,
@@ -40,7 +40,20 @@ const friendController = {
         },
       });
 
+      // If already accepted, treat as success (common after a retry)
       if (!request) {
+        const existing = await FriendRequest.findOne({
+          where: { id: requestId, receiverId: userId },
+        });
+        if (existing && existing.status === 'accepted') {
+          const sender = await User.findByPk(existing.senderId);
+          return res.json({
+            message: 'Friend request already accepted',
+            friend: sender
+              ? { id: sender.id, username: sender.username }
+              : null,
+          });
+        }
         return res.status(404).json({ message: 'Friend request not found' });
       }
 
@@ -63,12 +76,19 @@ const friendController = {
       const sender = await User.findByPk(request.senderId);
       const receiver = await User.findByPk(request.receiverId);
 
-      await Notification.create({
-        userId: request.senderId,
-        type: 'FRIEND_REQUEST_ACCEPTED',
-        content: `${receiver.username} accepted your friend request`,
-        read: false,
-      });
+      try {
+        await Notification.create({
+          userId: request.senderId,
+          senderId: request.receiverId,
+          type: 'friend_request_accepted',
+          content: `${receiver.username} accepted your friend request`,
+          entityId: request.receiverId,
+          read: false,
+        });
+      } catch (notifErr) {
+        // Friendship already created — don't fail accept because of notification issues
+        console.error('Accept notification error (ignored):', notifErr.message);
+      }
 
       res.json({
         message: 'Friend request accepted',

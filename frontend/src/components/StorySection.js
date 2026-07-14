@@ -9,7 +9,8 @@ import {
   Progress,
   Space,
   Tooltip,
-  Typography
+  Typography,
+  Input
 } from 'antd';
 import { 
   PlusOutlined, 
@@ -21,12 +22,15 @@ import {
   RightOutlined,
   FileImageOutlined,
   VideoCameraOutlined,
-  UserOutlined
+  UserOutlined,
+  SendOutlined,
+  MessageOutlined
 } from '@ant-design/icons';
 import styled from 'styled-components';
 import api from '../utils/axios';
 import { useAuth } from '../contexts/AuthContext';
 import moment from 'moment';
+import { checkSensitiveContent } from '../utils/contentModeration';
 
 const { Text } = Typography;
 
@@ -169,11 +173,92 @@ const StoryFooter = styled.div`
   left: 0;
   right: 0;
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 16px;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 16px 20px;
   color: white;
   z-index: 10;
+  background: linear-gradient(transparent, rgba(0,0,0,0.75));
+`;
+
+const StoryCommentsStrip = styled.div`
+  max-height: 120px;
+  overflow-y: auto;
+  width: 100%;
+`;
+
+const StoryCommentLine = styled.div`
+  font-size: 13px;
+  color: #fff;
+  margin-bottom: 4px;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+  span {
+    font-weight: 700;
+    margin-right: 6px;
+  }
+`;
+
+const StoryActionRow = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+`;
+
+const InsightsBar = styled.button`
+  width: 100%;
+  border: none;
+  border-radius: 24px;
+  padding: 12px 16px;
+  background: rgba(255, 255, 255, 0.15);
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  backdrop-filter: blur(8px);
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.22);
+  }
+`;
+
+const InsightsPanel = styled.div`
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-height: 55vh;
+  background: #1a1a1a;
+  border-radius: 16px 16px 0 0;
+  padding: 16px;
+  z-index: 20;
+  overflow-y: auto;
+  color: white;
+`;
+
+const InsightsSectionTitle = styled.div`
+  font-weight: 700;
+  font-size: 15px;
+  margin-bottom: 12px;
+  margin-top: 8px;
+`;
+
+const InsightsRow = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+`;
+
+const InsightsEmpty = styled.div`
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 13px;
+  padding: 8px 0 16px;
 `;
 
 const NavigationButton = styled(Button)`
@@ -238,10 +323,41 @@ const StorySection = ({ onStoryAdded }) => {
   const [progress, setProgress] = useState(0);
   const [showUploadOptions, setShowUploadOptions] = useState(false);
   const [likedStories, setLikedStories] = useState({});
+  const [storyLikesCount, setStoryLikesCount] = useState({});
+  const [storyComments, setStoryComments] = useState({});
+  const [commentDraft, setCommentDraft] = useState('');
+  const [sendingComment, setSendingComment] = useState(false);
+  const [storyCaption, setStoryCaption] = useState('');
+  const [storyLikers, setStoryLikers] = useState({});
+  const [insightsOpen, setInsightsOpen] = useState(false);
   const { user } = useAuth();
   const progressTimer = useRef(null);
+  const pausedRef = useRef(false);
   const storyDuration = 5000; // 5 seconds per story
   const fileInputRef = useRef(null);
+
+  const isOwnStory = (story) =>
+    !!story && !!user && (story.userId === user.id || story.user?.id === user.id);
+
+  const getAvatarUrl = (avatar) => {
+    if (!avatar) return null;
+    if (avatar.startsWith('http')) return avatar;
+    const base = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+    return avatar.startsWith('/') ? `${base}${avatar}` : `${base}/${avatar}`;
+  };
+
+  const fetchStoryInsights = async (storyId) => {
+    try {
+      const { data } = await api.get(`/api/stories/${storyId}/insights`);
+      setStoryLikers((prev) => ({ ...prev, [storyId]: data.likes || [] }));
+      setStoryComments((prev) => ({ ...prev, [storyId]: data.comments || [] }));
+      setStoryLikesCount((prev) => ({ ...prev, [storyId]: data.likesCount ?? 0 }));
+      return data;
+    } catch (error) {
+      console.error('Failed to load story insights:', error);
+      return null;
+    }
+  };
 
   useEffect(() => {
     fetchStories();
@@ -261,6 +377,14 @@ const StorySection = ({ onStoryAdded }) => {
       }
     };
   }, []);
+
+  // Refresh insights while viewing your own story
+  useEffect(() => {
+    if (!isModalVisible || !selectedStory || !isOwnStory(selectedStory)) return undefined;
+    fetchStoryInsights(selectedStory.id);
+    const interval = setInterval(() => fetchStoryInsights(selectedStory.id), 4000);
+    return () => clearInterval(interval);
+  }, [isModalVisible, selectedStory?.id, user?.id]);
 
   // Setup progress bar and auto-advance when a story is viewed
   useEffect(() => {
@@ -371,12 +495,22 @@ const StorySection = ({ onStoryAdded }) => {
     if (progressTimer.current) {
       clearInterval(progressTimer.current);
     }
-    
+    pausedRef.current = false;
     setProgress(0);
     const startTime = Date.now();
+    let pausedAccum = 0;
+    let pauseStarted = null;
     
     progressTimer.current = setInterval(() => {
-      const elapsedTime = Date.now() - startTime;
+      if (pausedRef.current) {
+        if (!pauseStarted) pauseStarted = Date.now();
+        return;
+      }
+      if (pauseStarted) {
+        pausedAccum += Date.now() - pauseStarted;
+        pauseStarted = null;
+      }
+      const elapsedTime = Date.now() - startTime - pausedAccum;
       const newProgress = (elapsedTime / storyDuration) * 100;
       
       if (newProgress >= 100) {
@@ -386,6 +520,14 @@ const StorySection = ({ onStoryAdded }) => {
         setProgress(newProgress);
       }
     }, 100);
+  };
+
+  const pauseStory = () => {
+    pausedRef.current = true;
+  };
+
+  const resumeStory = () => {
+    pausedRef.current = false;
   };
 
   const handleFileInputChange = (e) => {
@@ -410,37 +552,30 @@ const StorySection = ({ onStoryAdded }) => {
   };
 
   const handleStoryUpload = async (file, type = 'image') => {
+    const captionCheck = checkSensitiveContent(storyCaption);
+    if (captionCheck.blocked) {
+      message.error(captionCheck.message);
+      return;
+    }
+
     setUploading(true);
     try {
-      console.log('Uploading story with file:', {
-        name: file.name,
-        type: file.type,
-        size: file.size,
-        lastModified: new Date(file.lastModified).toISOString()
-      });
-      
       const formData = new FormData();
       formData.append('media', file);
-      
-      // Debug log the complete formData
-      for (let pair of formData.entries()) {
-        console.log(`FormData contains: ${pair[0]}, ${pair[1] instanceof File ? 'File: ' + pair[1].name : pair[1]}`);
+      if (storyCaption.trim()) {
+        formData.append('caption', storyCaption.trim());
       }
       
-      // Send the request to create story
       const response = await api.post('/api/stories', formData, {
         headers: {
           'Content-Type': 'multipart/form-data'
         }
       });
       
-      console.log('Story uploaded successfully:', response.data);
-      
-      // Add the new story to the list and close modal
       setStories(prev => [response.data, ...prev]);
       setAddStoryModalVisible(false);
+      setStoryCaption('');
       
-      // Notify parent component that a story was added
       if (onStoryAdded) {
         onStoryAdded();
       }
@@ -470,13 +605,20 @@ const StorySection = ({ onStoryAdded }) => {
   };
 
   const handleViewStory = (story) => {
-    console.log('Viewing story:', story);
-          setSelectedStory(story);
-          setIsModalVisible(true);
+    setSelectedStory(story);
+    setIsModalVisible(true);
     setProgress(0);
-    
-    // Start the progress timer
-    startProgressTimer();
+    setCommentDraft('');
+    setInsightsOpen(false);
+    setLikedStories(prev => ({ ...prev, [story.id]: !!story.isLiked }));
+    setStoryLikesCount(prev => ({ ...prev, [story.id]: story.likes || 0 }));
+    setStoryComments(prev => ({ ...prev, [story.id]: story.comments || [] }));
+    setStoryLikers(prev => ({ ...prev, [story.id]: story.likers || [] }));
+    if (isOwnStory(story)) {
+      fetchStoryInsights(story.id);
+    } else {
+      startProgressTimer();
+    }
   };
 
   const handleNextStory = () => {
@@ -490,9 +632,20 @@ const StorySection = ({ onStoryAdded }) => {
     
     if (currentIndex < stories.length - 1) {
       // There is a next story, show it
-      setSelectedStory(stories[currentIndex + 1]);
+      const next = stories[currentIndex + 1];
+      setSelectedStory(next);
+      setCommentDraft('');
+      setLikedStories(prev => ({ ...prev, [next.id]: !!next.isLiked }));
+      setStoryLikesCount(prev => ({ ...prev, [next.id]: next.likes || 0 }));
+      setStoryComments(prev => ({ ...prev, [next.id]: next.comments || prev[next.id] || [] }));
+      setStoryLikers(prev => ({ ...prev, [next.id]: next.likers || prev[next.id] || [] }));
+      setInsightsOpen(false);
       setProgress(0);
-      startProgressTimer();
+      if (isOwnStory(next)) {
+        fetchStoryInsights(next.id);
+      } else {
+        startProgressTimer();
+      }
     } else {
       // No more stories, close the modal
       handleCloseModal();
@@ -510,9 +663,20 @@ const StorySection = ({ onStoryAdded }) => {
     
     if (currentIndex > 0) {
       // There is a previous story, show it
-      setSelectedStory(stories[currentIndex - 1]);
+      const prevStory = stories[currentIndex - 1];
+      setSelectedStory(prevStory);
+      setCommentDraft('');
+      setLikedStories(prev => ({ ...prev, [prevStory.id]: !!prevStory.isLiked }));
+      setStoryLikesCount(prev => ({ ...prev, [prevStory.id]: prevStory.likes || 0 }));
+      setStoryComments(prev => ({ ...prev, [prevStory.id]: prevStory.comments || prev[prevStory.id] || [] }));
+      setStoryLikers(prev => ({ ...prev, [prevStory.id]: prevStory.likers || prev[prevStory.id] || [] }));
+      setInsightsOpen(false);
       setProgress(0);
-      startProgressTimer();
+      if (isOwnStory(prevStory)) {
+        fetchStoryInsights(prevStory.id);
+      } else {
+        startProgressTimer();
+      }
     } else {
       // Already at the first story, restart it
       setProgress(0);
@@ -524,6 +688,7 @@ const StorySection = ({ onStoryAdded }) => {
     setIsModalVisible(false);
     setSelectedStory(null);
     setProgress(0);
+    setInsightsOpen(false);
     if (progressTimer.current) {
       clearInterval(progressTimer.current);
     }
@@ -533,16 +698,49 @@ const StorySection = ({ onStoryAdded }) => {
     if (!storyId) return;
 
     try {
-      await api.post(`/api/stories/${storyId}/like`);
-      
-      // Update UI optimistically
+      const { data } = await api.post(`/api/stories/${storyId}/like`);
       setLikedStories(prev => ({
         ...prev,
-        [storyId]: !prev[storyId]
+        [storyId]: !!data.liked
       }));
+      setStoryLikesCount(prev => ({
+        ...prev,
+        [storyId]: data.likes ?? prev[storyId] ?? 0
+      }));
+      setSelectedStory(prev => prev && prev.id === storyId
+        ? { ...prev, isLiked: !!data.liked, likes: data.likes }
+        : prev);
     } catch (error) {
       console.error('Failed to like story:', error);
-      message.error('Failed to like story');
+      message.error(error.response?.data?.message || 'Failed to like story');
+    }
+  };
+
+  const handleStoryComment = async () => {
+    if (!selectedStory?.id) return;
+    const content = commentDraft.trim();
+    if (!content) return;
+
+    const check = checkSensitiveContent(content);
+    if (check.blocked) {
+      message.error(check.message);
+      return;
+    }
+
+    setSendingComment(true);
+    try {
+      const { data } = await api.post(`/api/stories/${selectedStory.id}/comments`, { content });
+      setStoryComments(prev => ({
+        ...prev,
+        [selectedStory.id]: [...(prev[selectedStory.id] || []), data]
+      }));
+      setCommentDraft('');
+      message.success('Comment sent');
+    } catch (error) {
+      message.error(error.response?.data?.message || 'Failed to comment');
+    } finally {
+      setSendingComment(false);
+      resumeStory();
     }
   };
 
@@ -649,6 +847,13 @@ const StorySection = ({ onStoryAdded }) => {
         footer={null}
       >
         <Space direction="vertical" style={{ width: '100%' }}>
+          <Input.TextArea
+            rows={2}
+            maxLength={150}
+            placeholder="Add a caption (optional)"
+            value={storyCaption}
+            onChange={(e) => setStoryCaption(e.target.value)}
+          />
           <Button 
             icon={<FileImageOutlined />} 
             onClick={handleImageUploadClick}
@@ -730,7 +935,7 @@ const StorySection = ({ onStoryAdded }) => {
       wrapClassName="story-modal"
       >
         {selectedStory && (
-        <StoryModalContent onClick={handleNextStory}>
+        <StoryModalContent onClick={isOwnStory(selectedStory) ? undefined : handleNextStory}>
           <StoryHeader>
             <div style={{ display: 'flex', alignItems: 'center' }}>
               <Avatar 
@@ -768,31 +973,124 @@ const StorySection = ({ onStoryAdded }) => {
 
           {renderStoryMedia()}
 
-          <StoryFooter>
-            <Space>
-              <Button
-                type="text"
-                icon={likedStories[selectedStory.id] ? <HeartFilled style={{ color: '#ff4d4f' }} /> : <HeartOutlined />}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleLikeStory(selectedStory.id);
-                }}
-                style={{ color: 'white' }}
-              />
-            </Space>
-            
-            {selectedStory.user?.id === user?.id && (
-              <Button
-                danger
-                type="primary"
-                icon={<DeleteOutlined />}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleDeleteStory(selectedStory.id);
-                }}
-              >
-                Delete
-              </Button>
+          <StoryFooter onClick={(e) => e.stopPropagation()}>
+            {selectedStory.caption ? (
+              <StoryCommentLine>
+                <span>{selectedStory.user?.username}</span>
+                {selectedStory.caption}
+              </StoryCommentLine>
+            ) : null}
+
+            {isOwnStory(selectedStory) ? (
+              <>
+                <InsightsBar
+                  type="button"
+                  onClick={() => setInsightsOpen((open) => !open)}
+                >
+                  <span>
+                    <HeartFilled style={{ color: '#ff4d4f', marginRight: 6 }} />
+                    {storyLikesCount[selectedStory.id] || 0} likes
+                  </span>
+                  <span>
+                    <MessageOutlined style={{ marginRight: 6 }} />
+                    {(storyComments[selectedStory.id] || []).length} replies
+                  </span>
+                </InsightsBar>
+                <StoryActionRow style={{ marginTop: 8 }}>
+                  <Button
+                    danger
+                    type="primary"
+                    icon={<DeleteOutlined />}
+                    onClick={() => handleDeleteStory(selectedStory.id)}
+                  >
+                    Delete story
+                  </Button>
+                </StoryActionRow>
+                {insightsOpen && (
+                  <InsightsPanel onClick={(e) => e.stopPropagation()}>
+                    <InsightsSectionTitle>Likes</InsightsSectionTitle>
+                    {(storyLikers[selectedStory.id] || []).length === 0 ? (
+                      <InsightsEmpty>No likes yet</InsightsEmpty>
+                    ) : (
+                      (storyLikers[selectedStory.id] || []).map((liker) => (
+                        <InsightsRow key={`like-${liker.id}-${liker.likedAt}`}>
+                          <Avatar
+                            src={getAvatarUrl(liker.avatar)}
+                            icon={<UserOutlined />}
+                            size={36}
+                          />
+                          <div>
+                            <div style={{ fontWeight: 600 }}>{liker.username}</div>
+                            <div style={{ fontSize: 12, opacity: 0.6 }}>
+                              {moment(liker.likedAt).fromNow()}
+                            </div>
+                          </div>
+                        </InsightsRow>
+                      ))
+                    )}
+                    <InsightsSectionTitle>Replies</InsightsSectionTitle>
+                    {(storyComments[selectedStory.id] || []).length === 0 ? (
+                      <InsightsEmpty>No replies yet</InsightsEmpty>
+                    ) : (
+                      (storyComments[selectedStory.id] || []).map((c) => (
+                        <InsightsRow key={c.id}>
+                          <Avatar
+                            src={getAvatarUrl(c.user?.avatar)}
+                            icon={<UserOutlined />}
+                            size={36}
+                          />
+                          <div>
+                            <div style={{ fontWeight: 600 }}>{c.user?.username || 'user'}</div>
+                            <div style={{ fontSize: 13, marginTop: 2 }}>{c.content}</div>
+                            <div style={{ fontSize: 12, opacity: 0.6, marginTop: 2 }}>
+                              {moment(c.createdAt).fromNow()}
+                            </div>
+                          </div>
+                        </InsightsRow>
+                      ))
+                    )}
+                  </InsightsPanel>
+                )}
+              </>
+            ) : (
+              <>
+                <StoryCommentsStrip>
+                  {(storyComments[selectedStory.id] || []).slice(-5).map((c) => (
+                    <StoryCommentLine key={c.id}>
+                      <span>{c.user?.username || 'user'}</span>
+                      {c.content}
+                    </StoryCommentLine>
+                  ))}
+                </StoryCommentsStrip>
+
+                <StoryActionRow>
+                  <Button
+                    type="text"
+                    icon={likedStories[selectedStory.id] ? <HeartFilled style={{ color: '#ff4d4f' }} /> : <HeartOutlined />}
+                    onClick={() => handleLikeStory(selectedStory.id)}
+                    style={{ color: 'white' }}
+                  />
+                  <span style={{ color: 'white', minWidth: 24 }}>
+                    {storyLikesCount[selectedStory.id] || 0}
+                  </span>
+                  <MessageOutlined style={{ color: 'white', marginRight: 4 }} />
+                  <Input
+                    placeholder="Send message..."
+                    value={commentDraft}
+                    onChange={(e) => setCommentDraft(e.target.value)}
+                    onFocus={pauseStory}
+                    onBlur={resumeStory}
+                    onPressEnter={handleStoryComment}
+                    style={{ flex: 1, borderRadius: 20 }}
+                    suffix={
+                      <SendOutlined
+                        onClick={handleStoryComment}
+                        style={{ color: sendingComment ? '#999' : '#1677ff', cursor: 'pointer' }}
+                      />
+                    }
+                  />
+                </StoryActionRow>
+              </>
             )}
           </StoryFooter>
 

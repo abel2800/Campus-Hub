@@ -29,7 +29,14 @@ const Notification = sequelize.define('Notification', {
     type: DataTypes.STRING,
     allowNull: false,
     validate: {
-      isIn: [['friend_request', 'message', 'post_like', 'post_comment', 'course_enroll']]
+      isIn: [[
+        'friend_request',
+        'friend_request_accepted',
+        'message',
+        'post_like',
+        'post_comment',
+        'course_enroll',
+      ]]
     }
   },
   content: {

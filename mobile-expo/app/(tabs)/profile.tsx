@@ -38,9 +38,13 @@ export default function ProfileScreen() {
   const load = async () => {
     if (!user?.id) return;
     try {
+      const coursePromise =
+        user.role === 'teacher'
+          ? api.get('/courses/teacher')
+          : api.get('/courses/user/enrolled');
       const [postsRes, coursesRes, friendsRes] = await Promise.all([
         api.get(`/posts/user/${user.id}`),
-        api.get('/courses/user/enrolled'),
+        coursePromise,
         api.get('/friends/list'),
       ]);
       const postList = Array.isArray(postsRes.data) ? postsRes.data : [];
@@ -63,7 +67,7 @@ export default function ProfileScreen() {
 
   useEffect(() => {
     load();
-  }, [user?.id]);
+  }, [user?.id, user?.role]);
 
   const handle = user?.username?.toLowerCase().replace(/\s+/g, '') || 'student';
 
@@ -85,13 +89,23 @@ export default function ProfileScreen() {
 
           <Text style={styles.name}>{user?.username || 'Student'}</Text>
           <Text style={styles.handle}>
-            @{handle}{user?.department ? ` · ${user.department}` : ''}
+            @{handle}
+            {user?.role === 'teacher' ? ' · Teacher' : ''}
+            {user?.department ? ` · ${user.department}` : ''}
           </Text>
           {user?.bio ? (
             <Text style={styles.bio}>{user.bio}</Text>
           ) : null}
 
           <View style={styles.actions}>
+            {user?.role === 'teacher' ? (
+              <GradButton
+                label="Create course"
+                compact
+                onPress={() => router.push('/create-course')}
+                style={styles.editBtn}
+              />
+            ) : null}
             <GradButton
               label="Edit profile"
               compact
@@ -114,7 +128,9 @@ export default function ProfileScreen() {
             </View>
             <View style={[styles.stat, styles.statBorder]}>
               <Text style={styles.statVal}>{stats.courses}</Text>
-              <Text style={styles.statLbl}>Courses</Text>
+              <Text style={styles.statLbl}>
+                {user?.role === 'teacher' ? 'Teaching' : 'Courses'}
+              </Text>
             </View>
             <View style={styles.stat}>
               <Text style={styles.statVal}>{stats.friends}</Text>

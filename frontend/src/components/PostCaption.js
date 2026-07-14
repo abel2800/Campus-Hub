@@ -98,9 +98,11 @@ const PostCaption = ({ post, truncate = false, maxLength = 100 }) => {
 
   return (
     <CaptionContainer>
-      {post.username && (
-        <Username to={`/profile/${post.username}`}>{post.username}</Username>
-      )}
+      { (post.user?.id || post.userId) ? (
+        <Username to={`/profile/${post.user?.id || post.userId}`}>{post.username || post.user?.username}</Username>
+      ) : post.username ? (
+        <Username as="span">{post.username}</Username>
+      ) : null}
       <Text>{renderCaptionWithLinks()}</Text>
     </CaptionContainer>
   );

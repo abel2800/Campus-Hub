@@ -15,7 +15,7 @@ export type User = {
 type AuthContextType = {
   user: User | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<User>;
   register: (data: { email: string; password: string; username: string; department?: string }) => Promise<void>;
   requestRegisterOtp: (data: { email: string; password: string; username: string; department?: string }) => Promise<{ message: string }>;
   requestTeacherRegisterOtp: (data: { email: string; password: string; username: string; department: string }) => Promise<{ message: string }>;
@@ -89,9 +89,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const id = email.trim();
     const payload = id.includes('@')
       ? { email: id.toLowerCase(), password }
-      : { email: id, password };
+      : { username: id, password };
     const { data } = await api.post('/auth/login', payload);
-    await persistSession(parseAuthResponse(data));
+    const session = parseAuthResponse(data);
+    await persistSession(session);
+    return session.user;
   };
 
   const requestRegisterOtp = async (payload: { email: string; password: string; username: string; department?: string }) => {

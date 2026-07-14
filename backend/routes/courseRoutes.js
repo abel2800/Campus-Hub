@@ -5,6 +5,7 @@ const courseController = require('../controllers/courseController');
 const authMiddleware = require('../middleware/authMiddleware');
 const isTeacher = require('../middleware/teacherMiddleware');
 const sequelize = require('../config/database');
+const { Op } = require('sequelize');
 
 // IMPORTANT: Order matters for routes with parameters
 
@@ -145,16 +146,17 @@ router.post('/:id/enroll', authMiddleware, courseController.enrollInCourse);
 // Create a new course — teachers only
 router.post('/', authMiddleware, isTeacher, courseController.uploadMiddleware, courseController.createCourse);
 
-// Update a course
-router.put('/:id', courseController.uploadMiddleware, courseController.updateCourse);
+// Update a course — teachers only (ownership checked in controller)
+router.put('/:id', authMiddleware, isTeacher, courseController.uploadMiddleware, courseController.updateCourse);
 
-// Delete a course
-router.delete('/:id', authMiddleware, courseController.deleteCourse);
+// Delete a course — teachers only (ownership checked in controller)
+router.delete('/:id', authMiddleware, isTeacher, courseController.deleteCourse);
 
-// Upload a video for a course
-router.post('/:id/videos', authMiddleware, async (req, res) => {
+// Upload a video for a course (by URL) — instructor only
+router.post('/:id/videos', authMiddleware, isTeacher, async (req, res) => {
   try {
     const courseId = req.params.id;
+    const userId = req.user.id;
     const { title, description, videoUrl, thumbnail, duration, order } = req.body;
     
     console.log('Uploading video for course:', courseId, {
@@ -168,10 +170,12 @@ router.post('/:id/videos', authMiddleware, async (req, res) => {
       return res.status(400).json({ message: 'Title and video URL are required' });
     }
     
-    // Check if course exists
-    const course = await Course.findByPk(courseId);
+    // Check if course exists and belongs to this instructor
+    const course = await Course.findOne({
+      where: { id: courseId, instructorId: userId }
+    });
     if (!course) {
-      return res.status(404).json({ message: 'Course not found' });
+      return res.status(404).json({ message: 'Course not found or you do not have permission' });
     }
     
     // Create the video record
@@ -440,14 +444,9 @@ router.put('/:id/progress', authMiddleware, async (req, res) => {
   try {
     const courseId = req.params.id;
     const userId = req.user.id;
-    const { progress, videoId, lastCompletedTimestamp } = req.body;
+    const { progress, videoId, lastCompletedTimestamp, watchTime } = req.body;
     
-    console.log(`Updating progress for user ${userId} in course ${courseId}: ${progress}%`);
-    
-    // Validate progress value
-    if (progress === undefined || progress < 0 || progress > 100) {
-      return res.status(400).json({ message: 'Invalid progress value. Progress must be between 0 and 100.' });
-    }
+    console.log(`Updating progress for user ${userId} in course ${courseId}:`, { progress, videoId });
     
     // Find the enrollment
     const enrollment = await Enrollment.findOne({
@@ -458,45 +457,72 @@ router.put('/:id/progress', authMiddleware, async (req, res) => {
       console.log(`No enrollment found for user ${userId} in course ${courseId}`);
       return res.status(404).json({ message: 'Enrollment not found. Please enroll in this course first.' });
     }
+
+    let videoProgressValue = progress;
+    if (videoProgressValue === undefined || videoProgressValue === null) {
+      videoProgressValue = 0;
+    }
+    videoProgressValue = Math.max(0, Math.min(100, Number(videoProgressValue)));
     
-    // Update the enrollment with new progress
-    await enrollment.update({
-      progress: Math.max(enrollment.progress, progress), // Only update if new progress is higher
-      status: progress >= 100 ? 'completed' : 'enrolled',
-      updatedAt: new Date() // Update the last activity timestamp
-    });
-    
-    // If videoId is provided, update or create a progress record for this specific video
+    // If videoId is provided, upsert per-video progress (requires enrollmentId)
     if (videoId) {
-      // Check if we track individual video progress in the database
-      if (sequelize.models.StudentProgress) {
-        const [videoProgress, created] = await sequelize.models.StudentProgress.findOrCreate({
-          where: { userId, courseId, videoId },
-          defaults: {
-            progress,
-            lastWatched: new Date(),
-            completedTimestamp: progress >= 100 ? new Date() : null
-          }
-        });
-        
-        if (!created) {
-          // Only update if the new progress is higher
-          if (progress > videoProgress.progress) {
-            await videoProgress.update({
-              progress,
-              lastWatched: new Date(),
-              completedTimestamp: progress >= 100 ? new Date() : null
-            });
-          }
-        }
+      const video = await CourseVideo.findOne({ where: { id: videoId, courseId } });
+      if (!video) {
+        return res.status(404).json({ message: 'Video not found in this course' });
       }
+
+      const [videoProgress, created] = await StudentProgress.findOrCreate({
+        where: { userId, courseId, videoId },
+        defaults: {
+          enrollmentId: enrollment.id,
+          progress: videoProgressValue,
+          lastWatched: new Date(),
+          completedTimestamp: videoProgressValue >= 90 ? new Date() : null,
+          watchTime: watchTime || 0
+        }
+      });
+
+      if (!created) {
+        const nextProgress = Math.max(videoProgress.progress || 0, videoProgressValue);
+        await videoProgress.update({
+          enrollmentId: enrollment.id,
+          progress: nextProgress,
+          lastWatched: new Date(),
+          completedTimestamp: nextProgress >= 90
+            ? (videoProgress.completedTimestamp || new Date())
+            : videoProgress.completedTimestamp,
+          watchTime: Math.max(videoProgress.watchTime || 0, watchTime || 0)
+        });
+      }
+
+      // Overall course progress = % of videos completed (>= 90%)
+      const totalVideos = await CourseVideo.count({ where: { courseId } });
+      const completedVideos = await StudentProgress.count({
+        where: {
+          userId,
+          courseId,
+          progress: { [Op.gte]: 90 }
+        }
+      });
+      const overallProgress = totalVideos > 0
+        ? Math.min(100, Math.round((completedVideos / totalVideos) * 100))
+        : videoProgressValue;
+
+      await enrollment.update({
+        progress: Math.max(enrollment.progress || 0, overallProgress),
+        status: overallProgress >= 100 ? 'completed' : 'enrolled'
+      });
+    } else {
+      // Course-level progress only (backward compatible)
+      if (progress === undefined || progress < 0 || progress > 100) {
+        return res.status(400).json({ message: 'Invalid progress value. Progress must be between 0 and 100.' });
+      }
+      await enrollment.update({
+        progress: Math.max(enrollment.progress || 0, progress),
+        status: progress >= 100 ? 'completed' : 'enrolled'
+      });
     }
     
-    // Get course total videos
-    const course = await Course.findByPk(courseId);
-    const totalVideos = course ? course.totalVideos || 0 : 0;
-    
-    // Calculate and return updated data
     const updatedEnrollment = await Enrollment.findOne({
       where: { userId, courseId },
       include: [{
@@ -512,7 +538,7 @@ router.put('/:id/progress', authMiddleware, async (req, res) => {
       status: updatedEnrollment.status,
       lastActivity: updatedEnrollment.updatedAt,
       course: updatedEnrollment.course,
-      grade: Math.floor(updatedEnrollment.progress) // Grade based on progress percentage
+      grade: Math.floor(updatedEnrollment.progress)
     });
   } catch (error) {
     console.error('Error updating course progress:', error);

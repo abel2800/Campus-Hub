@@ -34,6 +34,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import moment from 'moment';
 import api from '../utils/axios';
 import PostCaption from './PostCaption';
+import { checkSensitiveContent } from '../utils/contentModeration';
 
 const { Text, Paragraph } = Typography;
 const { TextArea } = Input;
@@ -226,6 +227,12 @@ const PostCard = ({ post, currentUser, onDelete, allowDelete = false }) => {
 
   const handleSubmitComment = async () => {
     if (!commentText.trim()) return;
+
+    const check = checkSensitiveContent(commentText);
+    if (check.blocked) {
+      message.error(check.message);
+      return;
+    }
     
     try {
       setLoading(true);
@@ -238,7 +245,7 @@ const PostCard = ({ post, currentUser, onDelete, allowDelete = false }) => {
       setCommentText('');
     } catch (error) {
       console.error('Error posting comment:', error);
-      message.error('Failed to post comment');
+      message.error(error.response?.data?.message || 'Failed to post comment');
     } finally {
       setLoading(false);
     }
@@ -376,7 +383,7 @@ const PostCard = ({ post, currentUser, onDelete, allowDelete = false }) => {
     <PostContainer>
       <PostHeader>
         <UserInfo 
-          onClick={() => navigate(`/profile/${post.user.username}`)}
+          onClick={() => navigate(`/profile/${post.user.id}`)}
           style={{ cursor: 'pointer' }}
         >
           <Avatar 
@@ -458,14 +465,14 @@ const PostCard = ({ post, currentUser, onDelete, allowDelete = false }) => {
                     icon={<UserOutlined />}
                     size="small"
                     style={{ cursor: 'pointer' }}
-                    onClick={() => navigate(`/profile/${comment.user.username}`)}
+                    onClick={() => navigate(`/profile/${comment.user.id}`)}
                   />
                   <CommentContent>
                     <CommentHeader>
                       <Text 
                         strong 
                         style={{ fontSize: 14, cursor: 'pointer' }}
-                        onClick={() => navigate(`/profile/${comment.user.username}`)}
+                        onClick={() => navigate(`/profile/${comment.user.id}`)}
                       >
                         {comment.user.username}
                       </Text>

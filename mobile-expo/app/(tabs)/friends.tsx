@@ -99,7 +99,14 @@ export default function FriendsScreen() {
       load();
       if (tab === 'search') search(query);
     } catch (e: any) {
-      Alert.alert('Error', e?.response?.data?.message || 'Could not accept');
+      const msg = e?.response?.data?.message || 'Could not accept';
+      // Stale UI after a partial accept — refresh lists so the request disappears
+      if (String(msg).toLowerCase().includes('not found')) {
+        load();
+        if (tab === 'search') search(query);
+        return;
+      }
+      Alert.alert('Error', msg);
     }
   };
 

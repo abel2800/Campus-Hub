@@ -2,6 +2,7 @@ const { Post, User, Comment, Like, Friend } = require('../models');
 const { Op } = require('sequelize');
 const { getMutualFriendIds } = require('../utils/friendship');
 const { canViewPosts } = require('../utils/privacy');
+const { rejectIfSensitive, normalizeText } = require('../utils/contentModeration');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
@@ -41,8 +42,10 @@ const upload = multer({
 // Create a new post
 const createPost = async (req, res) => {
     try {
-      const { caption } = req.body;
+      const caption = normalizeText(req.body.caption);
       const userId = req.user.id;
+
+      if (rejectIfSensitive(res, caption, 'caption')) return;
     
     // Handle media upload - store in imageUrl field
       let imageUrl = null;
@@ -59,7 +62,7 @@ const createPost = async (req, res) => {
     // IMPORTANT: Only include fields that exist in the actual database
     // Do NOT include mediaType, mediaUrl, or thumbnailUrl as they don't exist in the database
       const post = await Post.create({
-      caption,
+      caption: caption || null,
       imageUrl,
         userId,
       likesCount: 0,
@@ -212,11 +215,17 @@ const likePost = async (req, res) => {
 const addComment = async (req, res) => {
     try {
       const { postId } = req.params;
-      const { content } = req.body;
+      const content = normalizeText(req.body.content);
       const userId = req.user.id;
 
     console.log('Adding comment to post:', postId, 'by user:', userId);
     console.log('Comment content:', content);
+
+    if (!content) {
+      return res.status(400).json({ message: 'Comment content is required' });
+    }
+
+    if (rejectIfSensitive(res, content, 'content')) return;
     
     // For sample posts (ID >= 999900), simulate comment
     if (parseInt(postId) >= 999900) {
@@ -382,99 +391,14 @@ const getRecommendedPosts = async (req, res) => {
   try {
     const userId = req.user.id;
     console.log('Getting recommended posts for user:', userId);
-    
-    const generateSamplePosts = () => {
-      console.log('Generating sample posts for new users');
-      
-      return [
-        {
-          id: 999901,
-          caption: 'Welcome to Campus Hub! Connect with fellow students, share your academic journey, and discover campus events.',
-          mediaUrl: 'https://images.unsplash.com/photo-1523050854058-8df90110c9f1?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=1050&q=80',
-          mediaType: 'image',
-          userId: 999901,
-          likesCount: 42,
-          commentsCount: 5,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          user: {
-            id: 999901,
-            username: 'campus_official',
-            avatar: 'https://images.unsplash.com/photo-1572965733194-784e4b4efa45?ixlib=rb-4.0.3&auto=format&fit=crop&w=200&q=80'
-          },
-          comments: [
-            {
-              id: 99991,
-              content: 'Excited to be part of this community!',
-              user: {
-                id: 999902,
-                username: 'john_doe',
-                avatar: 'https://images.unsplash.com/photo-1599566150163-29194dcaad36?ixlib=rb-4.0.3&auto=format&fit=crop&w=200&q=80'
-              }
-            }
-          ],
-          isLiked: false
-        },
-        {
-          id: 999902,
-          caption: 'Check out the latest campus events and activities. Don\'t miss out!',
-          mediaUrl: 'https://images.unsplash.com/photo-1540575467063-178a50c2df87?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=1050&q=80',
-          mediaType: 'image',
-          userId: 999903,
-          likesCount: 38,
-          commentsCount: 3,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          user: {
-            id: 999903,
-            username: 'campus_events',
-            avatar: 'https://images.unsplash.com/photo-1607346256330-dee7af15f7c5?ixlib=rb-4.0.3&auto=format&fit=crop&w=200&q=80'
-          },
-          comments: [
-            {
-              id: 99992,
-              content: 'Looking forward to the science fair!',
-              user: {
-                id: 999904,
-                username: 'emily_science',
-                avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?ixlib=rb-4.0.3&auto=format&fit=crop&w=200&q=80'
-              }
-            }
-          ],
-          isLiked: false
-        }
-      ];
-    };
-    
-    // Always return sample posts for now to help with testing
-    // This ensures the UI always shows something even if database is empty
-    return res.json(generateSamplePosts());
-    
-    /*
-    // Get friend IDs
-    const friends = await Friend.findAll({
-      where: {
-        [Op.or]: [
-          { userId: userId },
-          { friendId: userId }
-        ]
-      }
-    });
-    
-    const friendIds = friends.map(friend => 
-      friend.userId === userId ? friend.friendId : friend.userId
-    );
-    
-    // Add current user to exclude their posts as well
-    friendIds.push(userId);
-    
-    console.log('Excluding posts from user and friends:', friendIds);
-    
-    // Get posts from non-friends
+
+    const friendIds = await getMutualFriendIds(userId);
+    const excludeIds = [...friendIds, userId];
+
     const posts = await Post.findAll({
       where: {
         userId: {
-          [Op.notIn]: friendIds
+          [Op.notIn]: excludeIds.length ? excludeIds : [userId]
         }
       },
       attributes: ['id', 'caption', 'imageUrl', 'userId', 'likesCount', 'commentsCount', 'createdAt', 'updatedAt'],
@@ -494,39 +418,24 @@ const getRecommendedPosts = async (req, res) => {
               attributes: ['id', 'username', 'avatar']
             }
           ],
-          limit: 2 // Only include a few comments for recommended posts
+          limit: 2
         }
       ],
       order: [['createdAt', 'DESC']],
-      limit: 10 // Limit to 10 recommended posts
+      limit: 10
     });
-    
-    console.log('Found recommended posts:', posts.length);
-    
-    // If no posts found, return sample posts
-    if (posts.length === 0) {
-      return res.json(generateSamplePosts());
-    }
-    
-    // Format posts for frontend
-    const formattedPosts = posts.map(post => {
+
+    const formattedPosts = await Promise.all(posts.map(async (post) => {
       const postData = post.toJSON();
-      
-      // For compatibility with frontend expecting mediaUrl
       if (postData.imageUrl) {
         postData.mediaUrl = postData.imageUrl;
-        // Detect if it's a video based on file extension
         postData.mediaType = postData.imageUrl.match(/\.(mp4|webm|ogg|mov|avi)$/i) ? 'video' : 'image';
       }
-      
-      return {
-        ...postData,
-        isLiked: false // Default for recommended posts
-      };
-    });
-    
+      const isLiked = await Like.findOne({ where: { postId: post.id, userId } });
+      return { ...postData, isLiked: !!isLiked };
+    }));
+
     res.json(formattedPosts);
-    */
   } catch (error) {
     console.error('Get recommended posts error:', error);
     res.status(500).json({ message: 'Failed to fetch recommended posts', error: error.message });

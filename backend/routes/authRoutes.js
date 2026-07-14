@@ -223,21 +223,41 @@ router.post('/login', async (req, res) => {
     const user = await User.findOne({
       where: isEmail
         ? { email: loginId.toLowerCase() }
-        : { username: loginId },
+        // Case-insensitive username (teachers often type Lu vs lu)
+        : { username: { [Op.iLike]: loginId } },
       attributes: ['id', 'email', 'password', 'username', 'department', 'avatar', 'bio'],
     });
 
     if (!user) {
       console.log('User not found:', loginId);
       return res.status(401).json({
-        message: 'Invalid credentials. If you just signed up, complete email verification with your OTP first.',
+        message: isEmail
+          ? 'No account found with that email. Sign up first, or finish OTP verification if you just registered.'
+          : 'No account found with that username.',
       });
     }
 
-    const isValidPassword = await bcrypt.compare(password, user.password);
+    let isValidPassword = false;
+    try {
+      // Prefer bcrypt; also accept legacy plaintext passwords and re-hash them
+      if (user.password && user.password.startsWith('$2')) {
+        isValidPassword = await bcrypt.compare(password, user.password);
+      } else if (user.password === password) {
+        isValidPassword = true;
+        const hashed = await bcrypt.hash(password, 10);
+        await user.update({ password: hashed });
+        console.log('Migrated plaintext password to bcrypt for user:', user.id);
+      } else {
+        isValidPassword = await bcrypt.compare(password, user.password);
+      }
+    } catch (compareErr) {
+      console.error('Password compare error:', compareErr);
+      isValidPassword = false;
+    }
+
     if (!isValidPassword) {
       console.log('Invalid password for user:', loginId);
-      return res.status(401).json({ message: 'Invalid credentials' });
+      return res.status(401).json({ message: 'Incorrect password. Try again or reset your password.' });
     }
 
     const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET, { expiresIn: '24h' });

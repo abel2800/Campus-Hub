@@ -83,12 +83,20 @@ export default function NotificationsScreen() {
   }, []);
 
   const accept = async (requestId: number) => {
-    await api.post(`/friends/requests/${requestId}/accept`);
+    try {
+      await api.post(`/friends/requests/${requestId}/accept`);
+    } catch {
+      /* already accepted / stale request — still refresh UI */
+    }
     load();
   };
 
   const reject = async (requestId: number) => {
-    await api.post(`/friends/requests/${requestId}/reject`);
+    try {
+      await api.post(`/friends/requests/${requestId}/reject`);
+    } catch {
+      /* ignore */
+    }
     load();
   };
 

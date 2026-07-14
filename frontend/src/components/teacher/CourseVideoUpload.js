@@ -1,18 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Upload, Button, Input, Form, Card, List, Typography, 
-  Progress, message, Spin, Modal, Divider, Space, Row, Col, Avatar, Empty
+  Progress, message, Spin, Modal, Divider, Space, Row, Col, Avatar, Empty, Tabs
 } from 'antd';
 import { 
   UploadOutlined, VideoCameraOutlined, 
   DeleteOutlined, PlayCircleOutlined,
   FileAddOutlined, OrderedListOutlined,
   EditOutlined, ArrowLeftOutlined,
-  LoadingOutlined, ReloadOutlined
+  LoadingOutlined, ReloadOutlined, LinkOutlined, YoutubeOutlined
 } from '@ant-design/icons';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../../utils/axios';
 import { formatDuration } from '../../utils/formatters';
+import { isYouTubeUrl, isYouTubePlaylistUrl } from '../../utils/youtube';
 
 const { Title, Text } = Typography;
 const { TextArea } = Input;
@@ -39,6 +40,9 @@ const CourseVideoUpload = ({ courseId: propsCourseId, onVideoAdded }) => {
   const [uploadStatus, setUploadStatus] = useState('');
   const [selectedVideo, setSelectedVideo] = useState(null);
   const [videoModalVisible, setVideoModalVisible] = useState(false);
+  const [youtubeUrl, setYoutubeUrl] = useState('');
+  const [playlistUrl, setPlaylistUrl] = useState('');
+  const [youtubeLoading, setYoutubeLoading] = useState(false);
 
   useEffect(() => {
     if (courseId) {
@@ -288,64 +292,191 @@ const CourseVideoUpload = ({ courseId: propsCourseId, onVideoAdded }) => {
     handleDelete(videoId);
   };
 
-  const renderUploadSection = () => (
-    <Card title="Upload Course Video" bordered={false}>
-      <Form form={form} layout="vertical">
-        <Form.Item
-          name="title"
-          label="Video Title"
-          rules={[{ required: true, message: 'Please enter a title for this video' }]}
-        >
-          <Input placeholder="Enter video title" prefix={<VideoCameraOutlined />} />
-        </Form.Item>
-        
-        <Form.Item
-          name="description"
-          label="Description"
-        >
-          <TextArea 
-            rows={3} 
-            placeholder="Enter video description (optional)" 
-          />
-        </Form.Item>
-        
-        <Form.Item label="Video File">
-          <Dragger
-            fileList={fileList}
-            onChange={handleFileChange}
-            beforeUpload={beforeUpload}
-            maxCount={1}
-            accept="video/*"
-            showUploadList={{ showRemoveIcon: true }}
-          >
-            <p className="ant-upload-drag-icon">
-              <UploadOutlined />
-            </p>
-            <p className="ant-upload-text">Click or drag video file to this area to upload</p>
-            <p className="ant-upload-hint">
-              Supports MP4, WebM videos up to 200MB
-            </p>
-          </Dragger>
-        </Form.Item>
+  const handleAddYouTubeVideo = async () => {
+    const url = youtubeUrl.trim();
+    if (!isYouTubeUrl(url)) {
+      message.error('Paste a valid YouTube video link (watch, youtu.be, or shorts)');
+      return;
+    }
+    if (isYouTubePlaylistUrl(url)) {
+      message.warning('This looks like a playlist link. Use the Playlist tab instead.');
+      return;
+    }
+    setYoutubeLoading(true);
+    try {
+      const title = form.getFieldValue('title');
+      const description = form.getFieldValue('description');
+      await api.post(`/api/teacher/courses/${courseId}/videos/youtube`, {
+        url,
+        title: title || undefined,
+        description: description || '',
+      });
+      message.success('YouTube video linked — students will watch it embedded in the course');
+      setYoutubeUrl('');
+      form.resetFields(['title', 'description']);
+      fetchVideos();
+    } catch (error) {
+      message.error(error.response?.data?.message || 'Failed to add YouTube video');
+    } finally {
+      setYoutubeLoading(false);
+    }
+  };
 
-        {uploading && (
-          <div style={{ marginBottom: 20 }}>
-            <Progress percent={uploadProgress} status="active" />
-          </div>
-        )}
-        
-        <Form.Item>
-          <Button 
-            type="primary" 
-            onClick={handleSubmit} 
-            loading={uploading}
-            icon={<UploadOutlined />}
-            block
-          >
-            {uploading ? 'Uploading...' : 'Upload Video'}
-          </Button>
-        </Form.Item>
-      </Form>
+  const handleImportPlaylist = async () => {
+    const url = playlistUrl.trim();
+    if (!isYouTubePlaylistUrl(url)) {
+      message.error('Paste a YouTube playlist URL (must include list=...)');
+      return;
+    }
+    setYoutubeLoading(true);
+    try {
+      const { data } = await api.post(
+        `/api/teacher/courses/${courseId}/videos/youtube-playlist`,
+        { playlistUrl: url }
+      );
+      message.success(data.message || `Imported ${data.count} videos`);
+      setPlaylistUrl('');
+      fetchVideos();
+    } catch (error) {
+      message.error(error.response?.data?.message || 'Failed to import playlist');
+    } finally {
+      setYoutubeLoading(false);
+    }
+  };
+
+  const renderUploadSection = () => (
+    <Card title="Add Course Videos" bordered={false}>
+      <Tabs
+        defaultActiveKey="file"
+        items={[
+          {
+            key: 'file',
+            label: (
+              <span>
+                <UploadOutlined /> Upload file
+              </span>
+            ),
+            children: (
+              <Form form={form} layout="vertical">
+                <Form.Item
+                  name="title"
+                  label="Video Title"
+                  rules={[{ required: true, message: 'Please enter a title for this video' }]}
+                >
+                  <Input placeholder="Enter video title" prefix={<VideoCameraOutlined />} />
+                </Form.Item>
+
+                <Form.Item name="description" label="Description">
+                  <TextArea rows={3} placeholder="Enter video description (optional)" />
+                </Form.Item>
+
+                <Form.Item label="Video File">
+                  <Dragger
+                    fileList={fileList}
+                    onChange={handleFileChange}
+                    beforeUpload={beforeUpload}
+                    maxCount={1}
+                    accept="video/*"
+                    showUploadList={{ showRemoveIcon: true }}
+                  >
+                    <p className="ant-upload-drag-icon">
+                      <UploadOutlined />
+                    </p>
+                    <p className="ant-upload-text">Click or drag video file to this area to upload</p>
+                    <p className="ant-upload-hint">Supports MP4, WebM videos up to 200MB</p>
+                  </Dragger>
+                </Form.Item>
+
+                {uploading && (
+                  <div style={{ marginBottom: 20 }}>
+                    <Progress percent={uploadProgress} status="active" />
+                  </div>
+                )}
+
+                <Form.Item>
+                  <Button
+                    type="primary"
+                    onClick={handleSubmit}
+                    loading={uploading}
+                    icon={<UploadOutlined />}
+                    block
+                  >
+                    {uploading ? 'Uploading...' : 'Upload Video'}
+                  </Button>
+                </Form.Item>
+              </Form>
+            ),
+          },
+          {
+            key: 'youtube',
+            label: (
+              <span>
+                <YoutubeOutlined /> YouTube link
+              </span>
+            ),
+            children: (
+              <div>
+                <Text type="secondary" style={{ display: 'block', marginBottom: 16 }}>
+                  Mirror a YouTube video without downloading it. Students watch the embedded player in the course.
+                </Text>
+                <Form form={form} layout="vertical">
+                  <Form.Item label="YouTube video URL">
+                    <Input
+                      placeholder="https://www.youtube.com/watch?v=..."
+                      prefix={<LinkOutlined />}
+                      value={youtubeUrl}
+                      onChange={(e) => setYoutubeUrl(e.target.value)}
+                    />
+                  </Form.Item>
+                  <Form.Item name="title" label="Title (optional)">
+                    <Input placeholder="Auto-filled from YouTube if left blank" />
+                  </Form.Item>
+                  <Button
+                    type="primary"
+                    icon={<YoutubeOutlined />}
+                    loading={youtubeLoading}
+                    onClick={handleAddYouTubeVideo}
+                    block
+                  >
+                    Link YouTube video
+                  </Button>
+                </Form>
+              </div>
+            ),
+          },
+          {
+            key: 'playlist',
+            label: (
+              <span>
+                <OrderedListOutlined /> Playlist
+              </span>
+            ),
+            children: (
+              <div>
+                <Text type="secondary" style={{ display: 'block', marginBottom: 16 }}>
+                  Import every video from a YouTube playlist as course lessons. Requires YOUTUBE_API_KEY on the server.
+                </Text>
+                <Input
+                  placeholder="https://www.youtube.com/playlist?list=..."
+                  prefix={<LinkOutlined />}
+                  value={playlistUrl}
+                  onChange={(e) => setPlaylistUrl(e.target.value)}
+                  style={{ marginBottom: 12 }}
+                />
+                <Button
+                  type="primary"
+                  icon={<OrderedListOutlined />}
+                  loading={youtubeLoading}
+                  onClick={handleImportPlaylist}
+                  block
+                >
+                  Import playlist videos
+                </Button>
+              </div>
+            ),
+          },
+        ]}
+      />
     </Card>
   );
 

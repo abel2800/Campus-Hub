@@ -23,7 +23,18 @@ function RootNav() {
 
     if (user && authScreen) {
       router.replace('/(tabs)');
-    } else if (!user && (segment === '(tabs)' || segment === 'course' || segment === 'chat' || segment === 'notifications' || segment === 'edit-profile' || segment === 'settings' || segment === 'profile')) {
+    } else if (
+      !user &&
+      (segment === '(tabs)' ||
+        segment === 'course' ||
+        segment === 'chat' ||
+        segment === 'notifications' ||
+        segment === 'edit-profile' ||
+        segment === 'settings' ||
+        segment === 'profile' ||
+        segment === 'create-course' ||
+        segment === 'manage-course')
+    ) {
       router.replace('/login');
     }
   }, [user, loading, segments]);
@@ -43,6 +54,8 @@ function RootNav() {
         <Stack.Screen name="reset-password" options={{ title: 'Reset password' }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="course/[id]" options={{ title: 'Course' }} />
+        <Stack.Screen name="create-course" options={{ headerShown: false }} />
+        <Stack.Screen name="manage-course/[id]" options={{ headerShown: false }} />
         <Stack.Screen name="chat/[userId]" options={{ headerShown: false }} />
         <Stack.Screen name="profile/[userId]" options={{ headerShown: false }} />
         <Stack.Screen name="settings" options={{ headerShown: false }} />

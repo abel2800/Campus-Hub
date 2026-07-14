@@ -9,13 +9,14 @@ import { C, Gradients } from '../../theme/colors';
 const TABS: { name: string; icon: keyof typeof Ionicons.glyphMap }[] = [
   { name: 'index', icon: 'home' },
   { name: 'social', icon: 'grid' },
+  { name: 'courses', icon: 'school' },
   { name: 'friends', icon: 'people' },
   { name: 'chat', icon: 'chatbubble' },
   { name: 'profile', icon: 'person' },
 ];
 
 /** Hidden from tab bar but still routable */
-const HIDDEN = new Set(['courses', 'two']);
+const HIDDEN = new Set(['two']);
 
 export function CampusTabBar({ state, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();

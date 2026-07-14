@@ -3,8 +3,32 @@ const router = express.Router();
 const teacherController = require('../controllers/teacherController');
 const auth = require('../middleware/authMiddleware');
 const isTeacher = require('../middleware/teacherMiddleware');
-const { Course, Section, Enrollment, User } = require('../models');
+const { Course, Enrollment, User, CourseVideo } = require('../models');
 const upload = require('../middleware/uploadMiddleware');
+const {
+  isYouTubeUrl,
+  fetchVideoMeta,
+  fetchPlaylistVideos,
+} = require('../utils/youtube');
+
+async function getOwnedCourse(courseId, userId) {
+  return Course.findOne({ where: { id: courseId, instructorId: userId } });
+}
+
+async function addVideoToCourse(course, videoData) {
+  const order = videoData.order ?? (await CourseVideo.count({ where: { courseId: course.id } })) + 1;
+  const video = await CourseVideo.create({
+    courseId: course.id,
+    title: videoData.title,
+    description: videoData.description || '',
+    videoUrl: videoData.videoUrl,
+    thumbnail: videoData.thumbnail || '',
+    duration: videoData.duration || 0,
+    order,
+  });
+  await Course.increment({ totalVideos: 1 }, { where: { id: course.id } });
+  return video;
+}
 
 // Apply authentication middleware to all routes
 router.use(auth);
@@ -31,16 +55,15 @@ router.delete('/courses/:courseId', async (req, res) => {
   try {
     const { courseId } = req.params;
     
-    // Check if the course belongs to this teacher
+    // Courses use instructorId (user id), not teacherId
     const course = await Course.findOne({
-      where: { id: courseId, teacherId: req.teacher.id }
+      where: { id: courseId, instructorId: req.user.id }
     });
     
     if (!course) {
       return res.status(404).json({ message: 'Course not found or you do not have permission' });
     }
     
-    // Delete the course
     await course.destroy();
     
     res.json({ message: 'Course deleted successfully' });
@@ -83,18 +106,17 @@ router.post('/courses/:courseId/videos', upload.single('video'), async (req, res
       return res.status(400).json({ message: 'Uploaded file is not a video' });
     }
     
-    // For testing purposes, we'll mock teacher check
-    console.log('[VIDEO UPLOAD] Bypassing teacher ownership verification for testing');
-    
     // Create video entry in database
     try {
       const { CourseVideo, Course } = require('../models');
       
-      // First check if the course exists
-      const course = await Course.findByPk(courseId);
+      // Course must belong to this instructor
+      const course = await Course.findOne({
+        where: { id: courseId, instructorId: userId }
+      });
       if (!course) {
-        console.log(`[VIDEO UPLOAD] Course ${courseId} not found`);
-        return res.status(404).json({ message: 'Course not found' });
+        console.log(`[VIDEO UPLOAD] Course ${courseId} not found or unauthorized for user ${userId}`);
+        return res.status(404).json({ message: 'Course not found or you do not have permission' });
       }
       
       // Check if order is provided
@@ -152,6 +174,88 @@ router.post('/courses/:courseId/videos', upload.single('video'), async (req, res
   }
 });
 
+// Mirror a single YouTube video (no download — stores embed URL)
+router.post('/courses/:courseId/videos/youtube', async (req, res) => {
+  try {
+    const { courseId } = req.params;
+    const userId = req.user.id;
+    const { url, title, description, order } = req.body;
+
+    if (!url || !isYouTubeUrl(url)) {
+      return res.status(400).json({ message: 'A valid YouTube video URL is required' });
+    }
+
+    const course = await getOwnedCourse(courseId, userId);
+    if (!course) {
+      return res.status(404).json({ message: 'Course not found or you do not have permission' });
+    }
+
+    const meta = await fetchVideoMeta(url);
+    const video = await addVideoToCourse(course, {
+      title: title?.trim() || meta.title,
+      description: description || '',
+      videoUrl: meta.videoUrl,
+      thumbnail: meta.thumbnail,
+      duration: meta.duration,
+      order,
+    });
+
+    return res.status(201).json({
+      message: 'YouTube video linked successfully',
+      video,
+      source: 'youtube',
+    });
+  } catch (error) {
+    console.error('[YOUTUBE VIDEO] Error:', error);
+    return res.status(500).json({ message: error.message || 'Failed to add YouTube video' });
+  }
+});
+
+// Import all videos from a YouTube playlist (requires YOUTUBE_API_KEY)
+router.post('/courses/:courseId/videos/youtube-playlist', async (req, res) => {
+  try {
+    const { courseId } = req.params;
+    const userId = req.user.id;
+    const { playlistUrl } = req.body;
+
+    if (!playlistUrl || !isYouTubeUrl(playlistUrl)) {
+      return res.status(400).json({ message: 'A valid YouTube playlist URL is required' });
+    }
+
+    const course = await getOwnedCourse(courseId, userId);
+    if (!course) {
+      return res.status(404).json({ message: 'Course not found or you do not have permission' });
+    }
+
+    const { videos } = await fetchPlaylistVideos(playlistUrl);
+    const created = [];
+    let order = await CourseVideo.count({ where: { courseId: course.id } });
+
+    for (const item of videos) {
+      order += 1;
+      const video = await addVideoToCourse(course, {
+        title: item.title,
+        description: '',
+        videoUrl: item.videoUrl,
+        thumbnail: item.thumbnail,
+        duration: item.duration,
+        order,
+      });
+      created.push(video);
+    }
+
+    return res.status(201).json({
+      message: `Imported ${created.length} videos from YouTube playlist`,
+      count: created.length,
+      videos: created,
+      source: 'youtube-playlist',
+    });
+  } catch (error) {
+    console.error('[YOUTUBE PLAYLIST] Error:', error);
+    return res.status(500).json({ message: error.message || 'Failed to import playlist' });
+  }
+});
+
 // Fetch videos for a course
 router.get('/courses/:courseId/videos', async (req, res) => {
   try {
@@ -173,38 +277,11 @@ router.get('/courses/:courseId/videos', async (req, res) => {
   }
 });
 
-// Section routes
+// Section routes — not implemented (no Section model yet)
 router.post('/courses/:courseId/sections', async (req, res) => {
-  try {
-    const { courseId } = req.params;
-    const { title, order } = req.body;
-    
-    // Validate required fields
-    if (!title) {
-      return res.status(400).json({ message: 'Section title is required' });
-    }
-    
-    // Check if the course belongs to this teacher
-    const course = await Course.findOne({
-      where: { id: courseId, instructorId: req.user.id }
-    });
-    
-    if (!course) {
-      return res.status(404).json({ message: 'Course not found or you do not have permission' });
-    }
-    
-    // Create the section
-    const section = await Section.create({
-      courseId,
-      title,
-      order: order || 1
-    });
-    
-    res.status(201).json(section);
-  } catch (error) {
-    console.error('Error creating section:', error);
-    res.status(500).json({ message: 'Failed to create section' });
-  }
+  return res.status(501).json({
+    message: 'Course sections are not available yet. Upload videos directly to the course instead.'
+  });
 });
 
 // Get enrolled students for a course

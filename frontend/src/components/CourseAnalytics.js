@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Row, Col, Progress, Statistic, Table } from 'antd';
+import { useParams } from 'react-router-dom';
+import { Card, Row, Col, Progress, Statistic, Table, Alert, Spin } from 'antd';
 import { Line } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -24,17 +25,27 @@ ChartJS.register(
   Legend
 );
 
-const CourseAnalytics = ({ courseId }) => {
+const CourseAnalytics = ({ courseId: propCourseId }) => {
+  const { courseId: paramCourseId } = useParams();
+  const courseId = propCourseId || paramCourseId;
   const [analytics, setAnalytics] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     const fetchAnalytics = async () => {
+      if (!courseId || courseId === 'undefined') {
+        setError('Missing course ID');
+        setLoading(false);
+        return;
+      }
       try {
+        setError(null);
         const response = await axios.get(`/api/courses/${courseId}/analytics`);
         setAnalytics(response.data);
-      } catch (error) {
-        console.error('Error fetching analytics:', error);
+      } catch (err) {
+        console.error('Error fetching analytics:', err);
+        setError(err.response?.data?.message || 'Failed to load analytics');
       } finally {
         setLoading(false);
       }
@@ -42,6 +53,14 @@ const CourseAnalytics = ({ courseId }) => {
 
     fetchAnalytics();
   }, [courseId]);
+
+  if (loading) {
+    return <div style={{ padding: 40, textAlign: 'center' }}><Spin /></div>;
+  }
+
+  if (error) {
+    return <Alert type="error" message={error} style={{ margin: 24 }} />;
+  }
 
   // Chart configuration
   const chartData = {
@@ -88,8 +107,6 @@ const CourseAnalytics = ({ courseId }) => {
       }
     }
   };
-
-  if (loading) return <div>Loading...</div>;
 
   return (
     <div>

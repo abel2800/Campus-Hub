@@ -11,6 +11,7 @@ import {
   Platform,
 } from 'react-native';
 import { Link } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../src/context/AuthContext';
 import { Colors, C } from '../src/theme/colors';
 import { Glass, GradButton, Screen } from '../src/components/campus/CampusUI';
@@ -37,6 +38,7 @@ export default function RegisterScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [department, setDepartment] = useState(DEPARTMENTS[0]);
   const [otp, setOtp] = useState('');
   const [error, setError] = useState('');
@@ -211,26 +213,44 @@ export default function RegisterScreen() {
 
           <Glass style={styles.field} padding={12}>
             <Text style={styles.label}>Password</Text>
-            <TextInput
-              style={styles.inputInner}
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-              placeholder="min 6 characters"
-              placeholderTextColor={C.textMute}
-            />
+            <View style={styles.passwordRow}>
+              <TextInput
+                style={[styles.inputInner, styles.passwordInput]}
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry={!showPassword}
+                placeholder="min 6 characters"
+                placeholderTextColor={C.textMute}
+              />
+              <TouchableOpacity onPress={() => setShowPassword((v) => !v)} hitSlop={12}>
+                <Ionicons
+                  name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                  size={22}
+                  color={C.textMute}
+                />
+              </TouchableOpacity>
+            </View>
           </Glass>
 
           <Glass style={styles.field} padding={12}>
             <Text style={styles.label}>Confirm password</Text>
-            <TextInput
-              style={styles.inputInner}
-              value={confirm}
-              onChangeText={setConfirm}
-              secureTextEntry
-              placeholder="repeat password"
-              placeholderTextColor={C.textMute}
-            />
+            <View style={styles.passwordRow}>
+              <TextInput
+                style={[styles.inputInner, styles.passwordInput]}
+                value={confirm}
+                onChangeText={setConfirm}
+                secureTextEntry={!showPassword}
+                placeholder="repeat password"
+                placeholderTextColor={C.textMute}
+              />
+              <TouchableOpacity onPress={() => setShowPassword((v) => !v)} hitSlop={12}>
+                <Ionicons
+                  name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                  size={22}
+                  color={C.textMute}
+                />
+              </TouchableOpacity>
+            </View>
           </Glass>
 
           {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -256,6 +276,8 @@ const styles = StyleSheet.create({
   label: { color: C.textMute, marginBottom: 6, fontSize: 13 },
   field: { marginBottom: 14 },
   inputInner: { fontSize: 14, color: C.text, padding: 0 },
+  passwordRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  passwordInput: { flex: 1 },
   input: {
     backgroundColor: Colors.surface,
     borderRadius: 12,
